@@ -407,6 +407,8 @@ pub enum Data {
     FileTransferLog((String, String)),
     #[cfg(windows)]
     ControlledSessionCount(usize),
+    #[cfg(windows)]
+    MiuAuthorizedSessionCount(usize),
     CmErr(String),
     // CM-side file reading responses (Windows only)
     // These are sent from CM back to Connection when CM handles file reading
@@ -1116,6 +1118,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                 stream
                     .send(&Data::ControlledSessionCount(
                         crate::Connection::alive_conns().len()
+                    ))
+                    .await
+            );
+        }
+        #[cfg(windows)]
+        Data::MiuAuthorizedSessionCount(_) => {
+            allow_err!(
+                stream
+                    .send(&Data::MiuAuthorizedSessionCount(
+                        crate::Connection::miu_authorized_session_count()
                     ))
                     .await
             );

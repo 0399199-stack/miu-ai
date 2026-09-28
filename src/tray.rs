@@ -1,15 +1,18 @@
+#[cfg(not(windows))]
 use crate::client::translate;
 #[cfg(windows)]
 use crate::ipc::Data;
 #[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{allow_err, log};
+#[cfg(not(windows))]
 use base::config::keys;
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use std::time::Duration;
 
 pub fn start_tray() {
+    #[cfg(not(windows))]
     if crate::ui_interface::get_builtin_option(keys::OPTION_HIDE_TRAY) == "Y" {
         #[cfg(not(target_os = "macos"))]
         {
@@ -28,9 +31,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
     use hbb_common::anyhow::Context;
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tray_icon::{
-        menu::{Menu, MenuEvent, MenuItem},
-        TrayIcon, TrayIconBuilder, TrayIconEvent as TrayEvent,
+        menu::{Menu, MenuItem},
+        TrayIcon, TrayIconBuilder,
     };
+    #[cfg(not(windows))]
+    use tray_icon::menu::MenuEvent;
 
     // Duplicated tray icons kept piling up through the blind spots of
     // `check_process("--tray", ..)`. https://github.com/rustdesk/rustdesk/issues/15689
@@ -64,22 +69,32 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let mut event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
+    #[cfg(windows)]
+    {
+        let status_i = MenuItem::new("Miu AI", false, None);
+        tray_menu.append_items(&[&status_i]).ok();
+    }
+    #[cfg(not(windows))]
     let hide_stop_service = crate::ui_interface::get_builtin_option(
         keys::OPTION_HIDE_STOP_SERVICE,
     ) == "Y";
     // The tray icon is only shown when the service is running, so we don't need to check
     // the `stop-service` option here.
+    #[cfg(not(windows))]
     let quit_i = if !hide_stop_service {
         Some(MenuItem::new(translate("Stop service".to_owned()), true, None))
     } else {
         None
     };
+    #[cfg(not(windows))]
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
+    #[cfg(not(windows))]
     if let Some(quit_i) = &quit_i {
         tray_menu.append_items(&[&open_i, quit_i]).ok();
     } else {
         tray_menu.append_items(&[&open_i]).ok();
     }
+    #[cfg(not(windows))]
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -96,13 +111,22 @@ fn make_tray() -> hbb_common::ResultType<()> {
             )
         }
     };
+    #[cfg(windows)]
+    let tooltip = |count: usize| {
+        if count == 0 {
+            "Miu AI · Ready".to_owned()
+        } else {
+            format!("Miu AI · In use ({count})")
+        }
+    };
     let mut _tray_icon: Arc<Mutex<Option<TrayIcon>>> = Default::default();
 
+    #[cfg(not(windows))]
     let menu_channel = MenuEvent::receiver();
-    let tray_channel = TrayEvent::receiver();
     #[cfg(windows)]
     let (ipc_sender, ipc_receiver) = std::sync::mpsc::channel::<Data>();
 
+    #[cfg(not(windows))]
     let open_func = move || {
         if cfg!(not(feature = "flutter")) {
             crate::run_me::<&str>(vec![]).ok();
@@ -134,7 +158,9 @@ fn make_tray() -> hbb_common::ResultType<()> {
         start_query_session_count(ipc_sender.clone());
     });
     #[cfg(windows)]
-    let mut last_click = std::time::Instant::now();
+    let mut miu_overlay: Option<std::process::Child> = None;
+    #[cfg(windows)]
+    let mut overlay_launch_error_reported = false;
     #[cfg(target_os = "macos")]
     {
         use tao::platform::macos::EventLoopExtMacOS;
@@ -148,6 +174,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
         if let tao::event::Event::NewEvents(tao::event::StartCause::Init) = event {
             // for fixing https://github.com/rustdesk/rustdesk/discussions/10210#discussioncomment-14600745
             // so we start tray, but not to show it
+            #[cfg(not(windows))]
             if crate::ui_interface::get_builtin_option(keys::OPTION_HIDE_TRAY) == "Y" {
                 return;
             }
@@ -187,6 +214,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
             }
         }
 
+        #[cfg(not(windows))]
         if let Ok(event) = menu_channel.try_recv() {
             if let Some(quit_i) = &quit_i {
                 if event.id == quit_i.id() {
@@ -224,37 +252,54 @@ fn make_tray() -> hbb_common::ResultType<()> {
             }
         }
 
-        if let Ok(_event) = tray_channel.try_recv() {
-            #[cfg(target_os = "windows")]
-            match _event {
-                TrayEvent::Click {
-                    button,
-                    button_state,
-                    ..
-                } => {
-                    if button == tray_icon::MouseButton::Left
-                        && button_state == tray_icon::MouseButtonState::Up
-                    {
-                        if last_click.elapsed() < std::time::Duration::from_secs(1) {
-                            return;
-                        }
-                        open_func();
-                        last_click = std::time::Instant::now();
-                    }
-                }
-                _ => {}
-            }
-        }
-
         #[cfg(windows)]
         if let Ok(data) = ipc_receiver.try_recv() {
             match data {
-                Data::ControlledSessionCount(count) => {
+                Data::MiuAuthorizedSessionCount(count) => {
                     _tray_icon
                         .lock()
                         .unwrap()
                         .as_mut()
                         .map(|t| t.set_tooltip(Some(tooltip(count))));
+                    if count == 0
+                        || crate::platform::is_prelogin()
+                        || crate::platform::windows::is_locked()
+                    {
+                        if let Some(mut child) = miu_overlay.take() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                        }
+                        overlay_launch_error_reported = false;
+                    } else if miu_overlay
+                        .as_mut()
+                        .map_or(true, |child| !matches!(child.try_wait(), Ok(None)))
+                    {
+                        if let Some(mut child) = miu_overlay.take() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                        }
+                        if let Some(path) = std::env::current_exe()
+                            .ok()
+                            .and_then(|p| p.parent().map(|dir| dir.join("MiuOverlay.exe")))
+                        {
+                            match std::process::Command::new(&path)
+                                .arg("--no-tray")
+                                .arg("--parent-pid")
+                                .arg(std::process::id().to_string())
+                                .spawn()
+                            {
+                                Ok(child) => {
+                                    miu_overlay = Some(child);
+                                    overlay_launch_error_reported = false;
+                                }
+                                Err(err) if !overlay_launch_error_reported => {
+                                    log::warn!("Cannot start Miu overlay at {:?}: {}", path, err);
+                                    overlay_launch_error_reported = true;
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -265,7 +310,6 @@ fn make_tray() -> hbb_common::ResultType<()> {
 #[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
 async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
-    let mut last_count = 0;
     loop {
         if let Ok(mut c) = crate::ipc::connect(1000, "").await {
             let mut timer = crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
@@ -277,23 +321,24 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
                                 log::error!("ipc connection closed: {}", err);
                                 break;
                             }
+                            Ok(None) => break,
 
-                            Ok(Some(Data::ControlledSessionCount(count))) => {
-                                if count != last_count {
-                                    last_count = count;
-                                    sender.send(Data::ControlledSessionCount(count)).ok();
-                                }
+                            Ok(Some(Data::MiuAuthorizedSessionCount(count))) => {
+                                sender.send(Data::MiuAuthorizedSessionCount(count)).ok();
                             }
                             _ => {}
                         }
                     }
 
                     _ = timer.tick() => {
-                        c.send(&Data::ControlledSessionCount(0)).await.ok();
+                        if c.send(&Data::MiuAuthorizedSessionCount(0)).await.is_err() {
+                            break;
+                        }
                     }
                 }
             }
         }
+        sender.send(Data::MiuAuthorizedSessionCount(0)).ok();
         hbb_common::sleep(1.).await;
     }
 }

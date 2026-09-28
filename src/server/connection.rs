@@ -5574,6 +5574,21 @@ impl Connection {
     }
 
     #[cfg(windows)]
+    pub fn miu_authorized_session_count() -> usize {
+        AUTHED_CONNS
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.conn_type,
+                    AuthConnType::Remote | AuthConnType::FileTransfer | AuthConnType::Terminal
+                )
+            })
+            .count()
+    }
+
+    #[cfg(windows)]
     fn portable_check(&mut self) {
         if self.portable.is_installed || !self.is_remote() || !self.keyboard {
             return;
