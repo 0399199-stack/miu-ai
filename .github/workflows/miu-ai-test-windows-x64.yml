@@ -109,7 +109,9 @@ jobs:
         run: |
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
           Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
-          if (-not (Test-Path ./rustdesk/rustdesk.exe)) { throw 'RustDesk executable missing' }
+          if (-not (Test-Path ./rustdesk/rustdesk.exe)) { throw 'RustDesk build executable missing' }
+          Move-Item -Path ./rustdesk/rustdesk.exe -Destination ./rustdesk/MiuAI.exe
+          if (-not (Test-Path ./rustdesk/MiuAI.exe)) { throw 'Miu AI executable missing' }
 
       - name: Build Miu overlay into distribution directory
         shell: pwsh
@@ -138,9 +140,18 @@ jobs:
       - name: Verify distribution inputs
         shell: pwsh
         run: |
-          foreach ($file in './rustdesk/rustdesk.exe','./rustdesk/librustdesk.dll','./rustdesk/MiuOverlay.exe','./rustdesk/WindowInjection.dll') {
+          foreach ($file in './rustdesk/MiuAI.exe','./rustdesk/librustdesk.dll','./rustdesk/MiuOverlay.exe','./rustdesk/WindowInjection.dll') {
             if (-not (Test-Path $file)) { throw "Required file missing: $file" }
           }
+
+      - name: Archive complete portable directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ./MiuTestOutput -Force | Out-Null
+          Add-Type -AssemblyName System.IO.Compression.ZipFile
+          [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            (Resolve-Path ./rustdesk).Path,
+            (Join-Path (Get-Location).Path 'MiuTestOutput/miu-ai-test-x64-portable.zip'))
 
       - name: Preserve compiled Runner resource for portable packer
         shell: bash
@@ -154,7 +165,7 @@ jobs:
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/MiuAI.exe
           popd
           mkdir -p ./MiuTestOutput
           mv ./target/release/rustdesk-portable-packer.exe ./MiuTestOutput/miu-ai-test-x64.exe
@@ -166,7 +177,7 @@ jobs:
         shell: pwsh
         run: |
           Push-Location ./res/msi
-          python preprocess.py --arp -d ../../rustdesk
+          python preprocess.py --arp --app-name MiuAI -d ../../rustdesk
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
@@ -178,9 +189,9 @@ jobs:
         shell: pwsh
         run: |
           "Source commit: ${{ github.sha }}" | Set-Content ./MiuTestOutput/SHA256.txt
-          Get-FileHash ./MiuTestOutput/*.exe,./MiuTestOutput/*.msi -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Add-Content ./MiuTestOutput/SHA256.txt
+          Get-FileHash ./MiuTestOutput/*.exe,./MiuTestOutput/*.msi,./MiuTestOutput/*.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Add-Content ./MiuTestOutput/SHA256.txt
 
-      - name: Upload unsigned test installers
+      - name: Upload unsigned test packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: miu-ai-test-windows-x64-unsigned
