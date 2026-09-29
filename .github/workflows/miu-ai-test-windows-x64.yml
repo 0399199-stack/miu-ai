@@ -144,10 +144,24 @@ jobs:
             if (-not (Test-Path $file)) { throw "Required file missing: $file" }
           }
 
+      - name: Add source and license notices
+        shell: pwsh
+        run: |
+          Copy-Item ./LICENCE ./rustdesk/LICENCE
+          $sourceCommit = (git rev-parse HEAD).Trim()
+          @(
+            'Miu AI unsigned Windows x64 test build'
+            'Modified from RustDesk: https://github.com/rustdesk/rustdesk'
+            "Source: $($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)/tree/$sourceCommit"
+            "Commit: $sourceCommit"
+            'License: GNU Affero General Public License version 3; see LICENCE.'
+          ) | Set-Content ./rustdesk/SOURCE.txt -Encoding utf8
+
       - name: Archive complete portable directory
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path ./MiuTestOutput -Force | Out-Null
+          Copy-Item ./rustdesk/LICENCE,./rustdesk/SOURCE.txt -Destination ./MiuTestOutput
           Add-Type -AssemblyName System.IO.Compression.ZipFile
           [System.IO.Compression.ZipFile]::CreateFromDirectory(
             (Resolve-Path ./rustdesk).Path,
@@ -177,7 +191,12 @@ jobs:
         shell: pwsh
         run: |
           Push-Location ./res/msi
-          python preprocess.py --arp --app-name MiuAI -d ../../rustdesk
+          python preprocess.py --arp --app-name MiuAI --manufacturer 'Miu AI Test Build' -d ../../rustdesk
+          $agpl = [IO.File]::ReadAllText((Resolve-Path ../../LICENCE).Path)
+          $escaped = $agpl.Replace('\', '\\').Replace('{', '\{').Replace('}', '\}')
+          $escaped = $escaped.Replace("`r`n", '\par ').Replace("`n", '\par ').Replace("`r", '\par ')
+          $rtf = '{\rtf1\ansi\deff0{\fonttbl{\f0\fmodern\fcharset0 Courier New;}}\f0\fs18 ' + $escaped + '\par }'
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path ./Package).Path 'License.rtf'), $rtf, [Text.Encoding]::ASCII)
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
