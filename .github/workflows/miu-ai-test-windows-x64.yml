@@ -1,0 +1,188 @@
+name: Miu AI unsigned Windows x64 test build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-window-injection:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: true
+      target: windows-2022
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+
+  build-windows-x64:
+    needs: [generate-bridge, build-window-injection]
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Restore Flutter bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        id: flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace Flutter engine with RustDesk build
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          $flutterRoot = "${{ steps.flutter.outputs['CACHE-PATH'] }}"
+          Copy-Item -Path windows-x64-release/* -Destination "$flutterRoot/bin/cache/artifacts/engine/windows-x64-release/" -Recurse -Force
+
+      - name: Patch Flutter 3.24.5
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff "$(dirname "$(dirname "$(which flutter)")")"
+          cd "$(dirname "$(dirname "$(which flutter)")")"
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: windows-2022
+
+      - name: Set up pinned vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: |
+          "$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build RustDesk and Flutter
+        shell: pwsh
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
+          if (-not (Test-Path ./rustdesk/rustdesk.exe)) { throw 'RustDesk executable missing' }
+
+      - name: Build Miu overlay into distribution directory
+        shell: pwsh
+        run: |
+          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (-not (Test-Path $compiler)) { throw 'Windows .NET Framework compiler missing' }
+          & $compiler /nologo /target:winexe /optimize+ /unsafe /out:./rustdesk/MiuOverlay.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll ./res/miu/MiuOverlay.cs
+          if ($LASTEXITCODE -ne 0) { throw 'Miu overlay compilation failed' }
+          if (-not (Test-Path ./rustdesk/MiuOverlay.exe)) { throw 'Miu overlay executable missing' }
+
+      - name: Add upstream virtual display files
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive -Path usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path ./usbmmidd_v2/Win32 -Recurse
+          Remove-Item -Path ./usbmmidd_v2/deviceinstaller64.exe,./usbmmidd_v2/deviceinstaller.exe,./usbmmidd_v2/usbmmidd.bat
+          Move-Item -Path ./usbmmidd_v2 -Destination ./rustdesk/usbmmidd_v2
+
+      - name: Restore WindowInjection.dll
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: topmostwindow-artifacts-x64
+          path: ./rustdesk
+
+      - name: Verify distribution inputs
+        shell: pwsh
+        run: |
+          foreach ($file in './rustdesk/rustdesk.exe','./rustdesk/librustdesk.dll','./rustdesk/MiuOverlay.exe','./rustdesk/WindowInjection.dll') {
+            if (-not (Test-Path $file)) { throw "Required file missing: $file" }
+          }
+
+      - name: Preserve compiled Runner resource for portable packer
+        shell: bash
+        run: |
+          runner_res=$(find . -name Runner.res -print -quit)
+          if [ -n "$runner_res" ]; then cp "$runner_res" ./libs/portable/Runner.res; fi
+
+      - name: Build unsigned self-extracting EXE
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          popd
+          mkdir -p ./MiuTestOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./MiuTestOutput/miu-ai-test-x64.exe
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+
+      - name: Build unsigned MSI
+        shell: pwsh
+        run: |
+          Push-Location ./res/msi
+          python preprocess.py --arp -d ../../rustdesk
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          if (-not $msi) { throw 'MSI output missing' }
+          Move-Item -Path $msi.FullName -Destination ../../MiuTestOutput/miu-ai-test-x64.msi
+          Pop-Location
+
+      - name: Record source revision and package hashes
+        shell: pwsh
+        run: |
+          "Source commit: ${{ github.sha }}" | Set-Content ./MiuTestOutput/SHA256.txt
+          Get-FileHash ./MiuTestOutput/*.exe,./MiuTestOutput/*.msi -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Add-Content ./MiuTestOutput/SHA256.txt
+
+      - name: Upload unsigned test installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: miu-ai-test-windows-x64-unsigned
+          path: ./MiuTestOutput
+          if-no-files-found: error
