@@ -16,6 +16,8 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential, Pack = 1)] internal struct Blend { internal byte Op, Flags, Alpha, Format; }
 
     [DllImport("user32.dll", SetLastError = true)] internal static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
+    [DllImport("user32.dll", SetLastError = true)] internal static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+    [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(IntPtr window);
     [DllImport("user32.dll")] internal static extern IntPtr GetDC(IntPtr window);
     [DllImport("user32.dll")] internal static extern int ReleaseDC(IntPtr window, IntPtr dc);
     [DllImport("gdi32.dll")] internal static extern IntPtr CreateCompatibleDC(IntPtr dc);
@@ -74,20 +76,22 @@ internal sealed class Overlay : Form
         return path;
     }
 
-    private static Bitmap RenderLayer(int width, int height, Color color, float brightness, bool banner)
+    private static Bitmap RenderLayer(int width, int height, Color color, float brightness, bool banner, float dpiScale)
     {
         Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
         BitmapData pixels = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
         try
         {
             // A narrow top glow and quieter side/bottom halos fade continuously into the desktop.
-            int radius = 86;
+            int radius = (int)Math.Ceiling(86 * dpiScale);
             byte[] topAlpha = new byte[radius], sideAlpha = new byte[radius], bottomAlpha = new byte[radius];
             for (int d = 0; d < radius; d++)
             {
-                topAlpha[d] = (byte)(brightness * (80 * Math.Exp(-d * d / 50.0) + 50 * Math.Exp(-d * d / 1250.0)));
-                sideAlpha[d] = (byte)(brightness * (18 * Math.Exp(-d * d / 128.0) + 12 * Math.Exp(-d * d / 1058.0)));
-                bottomAlpha[d] = (byte)(brightness * (14 * Math.Exp(-d * d / 128.0) + 8 * Math.Exp(-d * d / 1058.0)));
+                double logicalDistance = d / dpiScale;
+                double distanceSquared = logicalDistance * logicalDistance;
+                topAlpha[d] = (byte)(brightness * (80 * Math.Exp(-distanceSquared / 50.0) + 50 * Math.Exp(-distanceSquared / 1250.0)));
+                sideAlpha[d] = (byte)(brightness * (18 * Math.Exp(-distanceSquared / 128.0) + 12 * Math.Exp(-distanceSquared / 1058.0)));
+                bottomAlpha[d] = (byte)(brightness * (14 * Math.Exp(-distanceSquared / 128.0) + 8 * Math.Exp(-distanceSquared / 1058.0)));
             }
             unsafe
             {
@@ -117,9 +121,10 @@ internal sealed class Overlay : Form
         using (Graphics g = Graphics.FromImage(bitmap))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.ScaleTransform(dpiScale, dpiScale);
             if (banner)
             {
-                Rectangle r = new Rectangle((width - 390) / 2, 18, 390, 44);
+                Rectangle r = new Rectangle(((int)Math.Round(width / dpiScale) - 390) / 2, 18, 390, 44);
                 for (int i = 10; i >= 1; i--)
                 {
                     Rectangle glow = Rectangle.Inflate(r, i, i / 2);
@@ -152,7 +157,7 @@ internal sealed class Overlay : Form
         string fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
         using (Bitmap preview = new Bitmap(1280, 720))
-        using (Bitmap layer = RenderLayer(1280, 720, color, brightness, true))
+        using (Bitmap layer = RenderLayer(1280, 720, color, brightness, true, 1f))
         using (Graphics g = Graphics.FromImage(preview))
         {
             using (LinearGradientBrush background = new LinearGradientBrush(
@@ -165,7 +170,7 @@ internal sealed class Overlay : Form
 
     private void DrawLayer()
     {
-        using (Bitmap bitmap = RenderLayer(Width, Height, color, brightness, banner))
+        using (Bitmap bitmap = RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f)))
         {
             IntPtr screenDc = Native.GetDC(IntPtr.Zero);
             IntPtr memoryDc = Native.CreateCompatibleDC(screenDc);
@@ -266,7 +271,7 @@ internal sealed class OverlayApp : ApplicationContext
                 System.Threading.Thread.Sleep(200);
                 using (Bitmap excluded = Capture(primary))
                 {
-                    int topChanged = 0, topSamples = 0, sideChanged = 0, sideSamples = 0, bottomChanged = 0, bottomSamples = 0;
+                    int topChanged = 0, topSamples = 0, sideChanged = 0, sideSamples = 0, rightChanged = 0, rightSamples = 0, bottomChanged = 0, bottomSamples = 0;
                     for (int x = 100; x < included.Width - 100; x += 4)
                     {
                         Color a = included.GetPixel(x, 4), b = excluded.GetPixel(x, 4);
@@ -281,14 +286,19 @@ internal sealed class OverlayApp : ApplicationContext
                         Color a = included.GetPixel(4, y), b = excluded.GetPixel(4, y);
                         if (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B) > 8) sideChanged++;
                         sideSamples++;
+                        a = included.GetPixel(included.Width - 5, y); b = excluded.GetPixel(excluded.Width - 5, y);
+                        if (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B) > 8) rightChanged++;
+                        rightSamples++;
                     }
                     File.WriteAllText(report, "affinity=" + affinity + Environment.NewLine +
                         "overlay_bounds=" + windows[0].Bounds + Environment.NewLine +
+                        "overlay_dpi=" + Native.GetDpiForWindow(windows[0].Handle) + Environment.NewLine +
                         "screen_bounds=" + primary.Bounds + Environment.NewLine +
                         "changed_top_samples=" + topChanged + "/" + topSamples + Environment.NewLine +
                         "changed_side_samples=" + sideChanged + "/" + sideSamples + Environment.NewLine +
+                        "changed_right_samples=" + rightChanged + "/" + rightSamples + Environment.NewLine +
                         "changed_bottom_samples=" + bottomChanged + "/" + bottomSamples + Environment.NewLine +
-                        "result=" + (affinity && topChanged > topSamples / 2 && sideChanged > sideSamples / 2
+                        "result=" + (affinity && topChanged > topSamples / 2 && sideChanged > sideSamples / 2 && rightChanged > rightSamples / 2
                             ? (bottomChanged > bottomSamples / 2 ? "PASS" : "PARTIAL") : "FAIL") + Environment.NewLine);
                 }
             }
@@ -303,6 +313,7 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        Native.SetProcessDpiAwarenessContext(new IntPtr(-4)); // Per-monitor V2, before WinForms queries screens.
         Color color = Color.FromArgb(0, 255, 100);
         float brightness = 1f;
         string verify = null;
