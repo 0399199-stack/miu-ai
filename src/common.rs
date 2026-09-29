@@ -121,6 +121,23 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    #[cfg(windows)]
+    {
+        let is_miu = std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(|stem| stem.eq_ignore_ascii_case("MiuAI"))
+            })
+            .unwrap_or(false);
+        if is_miu {
+            let mut app_name = hbb_common::config::APP_NAME.write().unwrap();
+            if app_name.as_str() == "RustDesk" {
+                *app_name = "MiuAI".to_owned();
+            }
+        }
+    }
     #[cfg(all(target_os = "linux", feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
