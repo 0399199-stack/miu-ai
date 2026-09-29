@@ -118,7 +118,7 @@ jobs:
         run: |
           $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           if (-not (Test-Path $compiler)) { throw 'Windows .NET Framework compiler missing' }
-          & $compiler /nologo /target:winexe /optimize+ /unsafe /out:./rustdesk/MiuOverlay.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll ./res/miu/MiuOverlay.cs
+          & $compiler /nologo /target:winexe /optimize+ /unsafe /out:./rustdesk/MiuOverlay.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll .\res\miu\MiuOverlay.cs
           if ($LASTEXITCODE -ne 0) { throw 'Miu overlay compilation failed' }
           if (-not (Test-Path ./rustdesk/MiuOverlay.exe)) { throw 'Miu overlay executable missing' }
 
