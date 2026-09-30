@@ -195,6 +195,9 @@ class ConnectionPage extends StatefulWidget {
 /// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage>
     with SingleTickerProviderStateMixin, WindowListener {
+  bool get _miuController =>
+      isWindows && appName == 'MiuAI' && !isMiuHostOnly;
+
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
 
@@ -214,6 +217,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   void initState() {
     super.initState();
+    if (_miuController) bind.mainLoadRecentPeers();
     _allPeersLoader.init(setState);
     _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
@@ -222,6 +226,7 @@ class _ConnectionPageState extends State<ConnectionPage>
         if (lastRemoteId != _idController.id) {
           setState(() {
             _idController.id = lastRemoteId;
+            if (_miuController) _idEditingController.text = formatID(lastRemoteId);
           });
         }
       });
@@ -298,6 +303,7 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_miuController) return _buildMiuController(context);
     final isOutgoingOnly = bind.isOutgoingOnly();
     return Column(
       children: [
@@ -323,6 +329,169 @@ class _ConnectionPageState extends State<ConnectionPage>
         ).paddingOnly(left: 24, right: 24, bottom: 12)),
         if (!isOutgoingOnly) OnlineStatusWidget()
       ],
+    );
+  }
+
+  Widget _buildMiuController(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final canConnect = _idController.id.trim().isNotEmpty;
+    Widget action(String title, String subtitle, IconData icon, VoidCallback onTap) {
+      return Expanded(
+        child: InkWell(
+          onTap: canConnect ? onTap : null,
+          borderRadius: BorderRadius.circular(17),
+          child: Container(
+            height: 78,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(dark ? 0.07 : 0.48),
+              border: Border.all(color: Colors.white.withOpacity(dark ? 0.12 : 0.8)),
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Row(children: [
+              Icon(icon, size: 25, color: const Color(0xFF5D7FE4)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              )),
+              const Icon(Icons.chevron_right_rounded, size: 20),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1160),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 26, 28, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              MiuGlass(
+                padding: const EdgeInsets.all(28),
+                radius: 26,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text(translate('Connect device'),
+                          style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700))),
+                      const Icon(Icons.shield_outlined, size: 18,
+                          color: Color(0xFF667FC8)),
+                      const SizedBox(width: 5),
+                      Text(translate('Secure connection'),
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(translate('Enter the peer ID and choose an action'),
+                        style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 18),
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _idEditingController,
+                          focusNode: _idFocusNode,
+                          inputFormatters: [IDTextInputFormatter()],
+                          onChanged: (value) => setState(() => _idController.id = value),
+                          onSubmitted: (_) => onConnect(),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.desktop_windows_outlined),
+                            hintText: translate('Enter Remote ID'),
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(dark ? 0.05 : 0.48),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(height: 52, width: 120,
+                        child: ElevatedButton(
+                          onPressed: canConnect ? () => onConnect() : null,
+                          child: Text(translate('Connect')),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(height: 52, width: 120,
+                        child: OutlinedButton(
+                          onPressed: canConnect ? () => onConnect(viewOnly: true) : null,
+                          child: Text(translate('View only')),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 18),
+                    Row(children: [
+                      action(translate('Transfer file'), translate('Send or copy files'),
+                          Icons.folder_copy_outlined,
+                          () => onConnect(isFileTransfer: true)),
+                      const SizedBox(width: 10),
+                      action(translate('Terminal'), translate('Remote command line'),
+                          Icons.terminal_outlined,
+                          () => onConnect(isTerminal: true)),
+                      const SizedBox(width: 10),
+                      action(translate('Quick tasks'),
+                          translate('Connect to use quick tasks'), Icons.bolt_outlined,
+                          () {
+                            onConnect();
+                            showToast(translate('Open quick tasks from the remote toolbar'));
+                          }),
+                    ]),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+              Text(translate('Recent devices'),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Expanded(
+                child: MiuGlass(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+                  radius: 24,
+                  child: AnimatedBuilder(
+                    animation: gFFI.recentPeersModel,
+                    builder: (context, _) {
+                      final peers = gFFI.recentPeersModel.peers.take(4).toList();
+                      if (peers.isEmpty) {
+                        return Center(child: Text(translate('No recent devices'),
+                            style: Theme.of(context).textTheme.bodySmall));
+                      }
+                      return ListView.separated(
+                        itemCount: peers.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final peer = peers[index];
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 5),
+                            leading: const Icon(Icons.desktop_windows_outlined,
+                                color: Color(0xFF5D7FE4)),
+                            title: Text(peer.getId(), maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            subtitle: Text(peer.id),
+                            trailing: TextButton.icon(
+                              onPressed: () => connect(context, peer.id),
+                              icon: const Icon(Icons.arrow_forward_rounded, size: 17),
+                              label: Text(translate('Connect')),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

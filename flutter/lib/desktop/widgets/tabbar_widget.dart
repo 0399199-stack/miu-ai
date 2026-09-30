@@ -169,7 +169,10 @@ class DesktopTabController {
         }));
       }
     });
-    if ((isDesktop && (bind.isIncomingOnly() || bind.isOutgoingOnly())) ||
+    if ((isDesktop &&
+            (bind.isIncomingOnly() ||
+                bind.isOutgoingOnly() ||
+                (tabType == DesktopTabType.main && isMiuHostOnly))) ||
         callOnSelected) {
       if (state.value.tabs.length > index) {
         final key = state.value.tabs[index].key;
@@ -245,6 +248,7 @@ class DesktopTab extends StatefulWidget {
   // Right click tab menu
   final TabMenuBuilder? tabMenuBuilder;
   final Widget? tail;
+  final VoidCallback? onOpenSettings;
   final Future<bool> Function()? onWindowCloseButton;
   final TabBuilder? tabBuilder;
   final LabelGetter? labelGetter;
@@ -270,6 +274,7 @@ class DesktopTab extends StatefulWidget {
     this.pageViewBuilder,
     this.tabMenuBuilder,
     this.tail,
+    this.onOpenSettings,
     this.onWindowCloseButton,
     this.tabBuilder,
     this.labelGetter,
@@ -305,6 +310,7 @@ class _DesktopTabState extends State<DesktopTab>
       widget.pageViewBuilder;
   TabMenuBuilder? get tabMenuBuilder => widget.tabMenuBuilder;
   Widget? get tail => widget.tail;
+  VoidCallback? get onOpenSettings => widget.onOpenSettings;
   Future<bool> Function()? get onWindowCloseButton =>
       widget.onWindowCloseButton;
   TabBuilder? get tabBuilder => widget.tabBuilder;
@@ -325,6 +331,10 @@ class _DesktopTabState extends State<DesktopTab>
       tabType == DesktopTabType.main ||
       tabType == DesktopTabType.cm ||
       tabType == DesktopTabType.install;
+  bool get isMiuMainWindow =>
+      isWindows &&
+      tabType == DesktopTabType.main &&
+      bind.mainGetAppNameSync() == 'MiuAI';
 
   _DesktopTabState() : super();
 
@@ -514,6 +524,9 @@ class _DesktopTabState extends State<DesktopTab>
       Obx(() {
         if (stateGlobal.showTabBar.isTrue &&
             !(kUseCompatibleUiMode && isHideSingleItem())) {
+          if (isMiuMainWindow) {
+            return SizedBox(height: 56, child: _buildMiuBar());
+          }
           final showBottomDivider = _showTabBarBottomDivider(tabType);
           return SizedBox(
             height: _kTabBarHeight,
@@ -695,6 +708,171 @@ class _DesktopTabState extends State<DesktopTab>
           labelGetter: labelGetter,
         ).paddingOnly(left: 10)
       ],
+    );
+  }
+
+  Widget _buildMiuBar() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? Colors.white : const Color(0xFF18244A);
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          color: dark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.white.withOpacity(0.22),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(
+            children: [
+              loadIcon(30),
+              const SizedBox(width: 10),
+              Text('Miu AI',
+                  style: TextStyle(
+                      color: foreground,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(width: 22),
+              if (!isMiuHostOnly)
+                Obx(() {
+                  final current = state.value.tabs.isEmpty
+                      ? ''
+                      : state.value.selectedTabInfo.key;
+                  return Row(children: [
+                    _miuNavTab(
+                      translate(kTabLabelHomePage),
+                      current == kTabLabelHomePage,
+                      () => controller.jumpToByKey(kTabLabelHomePage),
+                    ),
+                    if (onOpenSettings != null)
+                      _miuNavTab(
+                        translate(kTabLabelSettingPage),
+                        current == kTabLabelSettingPage,
+                        onOpenSettings,
+                      ),
+                  ]);
+                })
+              else
+                Obx(() {
+                  final inSettings = state.value.tabs.isNotEmpty &&
+                      state.value.selectedTabInfo.key == kTabLabelSettingPage;
+                  return inSettings
+                      ? _miuNavTab(translate(kTabLabelHomePage), false,
+                          () => controller.jumpToByKey(kTabLabelHomePage))
+                      : Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF597BF2).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(translate('Host only'),
+                              style: TextStyle(
+                                  color: dark
+                                      ? const Color(0xFFAEBEFF)
+                                      : const Color(0xFF4564C8),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        );
+                }),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (_) => startDragging(isMainWindow),
+                  onDoubleTap: isMiuHostOnly
+                      ? null
+                      : () => toggleMaximize(isMainWindow)
+                          .then((value) => stateGlobal.setMaximized(value)),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              if (isMiuHostOnly && onOpenSettings != null)
+                _miuWindowAction(
+                  Icons.settings_outlined,
+                  translate(kTabLabelSettingPage),
+                  onOpenSettings,
+                ),
+              _miuWindowAction(
+                Icons.remove_rounded,
+                translate('Minimize'),
+                () => windowManager.minimize(),
+              ),
+              if (!isMiuHostOnly)
+                Obx(() => _miuWindowAction(
+                      stateGlobal.isMaximized.isTrue
+                          ? Icons.filter_none_rounded
+                          : Icons.crop_square_rounded,
+                      translate(stateGlobal.isMaximized.isTrue
+                          ? 'Restore'
+                          : 'Maximize'),
+                      () => toggleMaximize(isMainWindow)
+                          .then((value) => stateGlobal.setMaximized(value)),
+                    )),
+              _miuWindowAction(
+                Icons.close_rounded,
+                translate('Close'),
+                () => isMiuHostOnly
+                    ? windowManager.hide()
+                    : windowManager.close(),
+                close: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _miuNavTab(String label, bool selected, VoidCallback? onTap) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 38,
+        margin: const EdgeInsets.only(right: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF5B7CF2).withOpacity(dark ? 0.2 : 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.center,
+        child: Text(label,
+            style: TextStyle(
+                color: selected
+                    ? (dark ? const Color(0xFFAEBEFF) : const Color(0xFF3158DD))
+                    : (dark ? Colors.white70 : const Color(0xFF657295)),
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500)),
+      ),
+    );
+  }
+
+  Widget _miuWindowAction(IconData icon, String tooltip, VoidCallback? onTap,
+      {bool close = false}) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(left: 3),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(11),
+          hoverColor: close
+              ? const Color(0xFFF05D73).withOpacity(0.2)
+              : const Color(0xFF6486EE).withOpacity(0.12),
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(icon,
+                size: 18,
+                color: close
+                    ? const Color(0xFFBE596C)
+                    : (dark ? Colors.white70 : const Color(0xFF667497))),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -32,6 +32,9 @@ internal sealed class Overlay : Form
     private readonly Color color;
     private readonly float brightness;
     private readonly bool banner;
+    private IntPtr memoryDc;
+    private IntPtr layerBitmap;
+    private IntPtr previousBitmap;
 
     internal Overlay(Screen screen, Color color, float brightness, bool banner)
     {
@@ -59,9 +62,29 @@ internal sealed class Overlay : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        DrawLayer();
+        using (Bitmap bitmap = RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f)))
+        {
+            IntPtr screenDc = Native.GetDC(IntPtr.Zero);
+            memoryDc = Native.CreateCompatibleDC(screenDc);
+            layerBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
+            previousBitmap = Native.SelectObject(memoryDc, layerBitmap);
+            Native.ReleaseDC(IntPtr.Zero, screenDc);
+        }
+        UpdateLayer(255);
         if (!Native.SetWindowDisplayAffinity(Handle, Native.WdaExcludeFromCapture))
             MessageBox.Show("边缘光的截图排除未启用，错误码：" + Marshal.GetLastWin32Error(), "Miu AI");
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        if (memoryDc != IntPtr.Zero)
+        {
+            Native.SelectObject(memoryDc, previousBitmap);
+            Native.DeleteObject(layerBitmap);
+            Native.DeleteDC(memoryDc);
+            memoryDc = IntPtr.Zero;
+        }
+        base.OnFormClosed(e);
     }
 
     private static GraphicsPath Pill(Rectangle r, int radius)
@@ -133,7 +156,8 @@ internal sealed class Overlay : Form
                         g.DrawPath(pen, path);
                 }
                 using (GraphicsPath path = Pill(r, 12))
-                using (Brush fill = new SolidBrush(Color.FromArgb(225, 4, 112, 43)))
+                using (Brush fill = new SolidBrush(Color.FromArgb(230,
+                    20 + color.R * 42 / 100, 20 + color.G * 42 / 100, 20 + color.B * 42 / 100)))
                 using (Pen rim = new Pen(Color.FromArgb(110, color), 1))
                 {
                     g.FillPath(fill, path);
@@ -168,25 +192,16 @@ internal sealed class Overlay : Form
         }
     }
 
-    private void DrawLayer()
+    internal void UpdateLayer(byte alpha)
     {
-        using (Bitmap bitmap = RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f)))
-        {
-            IntPtr screenDc = Native.GetDC(IntPtr.Zero);
-            IntPtr memoryDc = Native.CreateCompatibleDC(screenDc);
-            IntPtr hBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
-            IntPtr old = Native.SelectObject(memoryDc, hBitmap);
-            Native.Point position = new Native.Point(Left, Top);
-            Native.Point source = new Native.Point(0, 0);
-            Native.Size size = new Native.Size(Width, Height);
-            Native.Blend blend = new Native.Blend { Op = 0, Flags = 0, Alpha = 255, Format = 1 };
-            bool updated = Native.UpdateLayeredWindow(Handle, screenDc, ref position, ref size, memoryDc, ref source, 0, ref blend, 2);
-            Native.SelectObject(memoryDc, old);
-            Native.DeleteObject(hBitmap);
-            Native.DeleteDC(memoryDc);
-            Native.ReleaseDC(IntPtr.Zero, screenDc);
-            if (!updated) throw new InvalidOperationException("UpdateLayeredWindow: " + Marshal.GetLastWin32Error());
-        }
+        IntPtr screenDc = Native.GetDC(IntPtr.Zero);
+        Native.Point position = new Native.Point(Left, Top);
+        Native.Point source = new Native.Point(0, 0);
+        Native.Size size = new Native.Size(Width, Height);
+        Native.Blend blend = new Native.Blend { Op = 0, Flags = 0, Alpha = alpha, Format = 1 };
+        bool updated = Native.UpdateLayeredWindow(Handle, screenDc, ref position, ref size, memoryDc, ref source, 0, ref blend, 2);
+        Native.ReleaseDC(IntPtr.Zero, screenDc);
+        if (!updated) throw new InvalidOperationException("UpdateLayeredWindow: " + Marshal.GetLastWin32Error());
     }
 }
 
@@ -197,6 +212,7 @@ internal sealed class OverlayApp : ApplicationContext
     private readonly string verifyDirectory;
     private readonly Timer demoTimer;
     private readonly Timer parentTimer;
+    private readonly Timer breathTimer;
     private readonly Process parentProcess;
     private bool exiting;
 
@@ -210,6 +226,18 @@ internal sealed class OverlayApp : ApplicationContext
             windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary);
             windows[i].Show();
         }
+        Stopwatch breathClock = Stopwatch.StartNew();
+        byte lastAlpha = 255;
+        breathTimer = new Timer { Interval = 80 };
+        breathTimer.Tick += delegate
+        {
+            double wave = (1 + Math.Cos(breathClock.Elapsed.TotalSeconds * Math.PI / 3)) / 2;
+            byte alpha = (byte)Math.Round(255 * (0.88 + 0.12 * wave));
+            if (alpha == lastAlpha) return;
+            lastAlpha = alpha;
+            foreach (Overlay window in windows) window.UpdateLayer(alpha);
+        };
+        breathTimer.Start();
         if (showTray)
             tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "Miu AI", Visible = true };
         if (parentPid > 0)
@@ -238,6 +266,7 @@ internal sealed class OverlayApp : ApplicationContext
     {
         if (exiting) return;
         exiting = true;
+        breathTimer.Dispose();
         if (demoTimer != null) demoTimer.Dispose();
         if (parentTimer != null) parentTimer.Dispose();
         if (parentProcess != null) parentProcess.Dispose();
@@ -314,7 +343,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         Native.SetProcessDpiAwarenessContext(new IntPtr(-4)); // Per-monitor V2, before WinForms queries screens.
-        Color color = Color.FromArgb(0, 255, 100);
+        Color color = Color.FromArgb(141, 124, 247);
         float brightness = 1f;
         string verify = null;
         string preview = null;

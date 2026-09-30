@@ -48,6 +48,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsCanRecordAudio = false;
   Timer? _updateTimer;
   bool isCardClosed = false;
+  bool _miuHostReady = false;
+  int _miuHostSessions = 0;
 
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
@@ -57,6 +59,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (isWindows && appName == 'MiuAI') {
+      return _buildBlock(
+        child: MiuBackdrop(
+          child: isMiuHostOnly
+              ? _buildMiuHost(context)
+              : const ConnectionPage(),
+        ),
+      );
+    }
     final isIncomingOnly = bind.isIncomingOnly();
     return _buildBlock(
       child: MiuBackdrop(
@@ -249,6 +260,129 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiuHost(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: MiuGlass(
+            padding: const EdgeInsets.all(22),
+            radius: 24,
+            child: ChangeNotifierProvider.value(
+              value: gFFI.serverModel,
+              child: Consumer<ServerModel>(builder: (context, model, _) {
+                final ready = _miuHostReady && !svcStopped.value;
+                final status = _miuHostSessions > 0
+                    ? translate('In use ({})')
+                        .replaceFirst('{}', '$_miuHostSessions')
+                    : ready
+                        ? translate('Ready for connections')
+                        : translate('Connection service unavailable');
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(children: [
+                      loadIcon(40),
+                      const SizedBox(width: 10),
+                      const Text('Miu AI',
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      Text(translate('Host only'),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: dark ? Colors.white70 : const Color(0xFF6680B7))),
+                    ]),
+                    const SizedBox(height: 23),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: (ready ? const Color(0xFF38BA89) : const Color(0xFFE59A4D))
+                              .withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.circle,
+                              size: 9,
+                              color: ready ? const Color(0xFF38BA89) : const Color(0xFFE59A4D)),
+                          const SizedBox(width: 8),
+                          Text(status, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    MiuGlass(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+                      radius: 18,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(translate('This device ID'),
+                              style: Theme.of(context).textTheme.bodySmall),
+                          Row(children: [
+                            Expanded(
+                              child: Text(model.serverId.text.isEmpty
+                                  ? '—'
+                                  : model.serverId.text,
+                                  style: const TextStyle(
+                                      fontSize: 25, fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.2)),
+                            ),
+                            IconButton(
+                              tooltip: translate('Copy'),
+                              icon: const Icon(Icons.copy_rounded, size: 19),
+                              onPressed: model.serverId.text.isEmpty
+                                  ? null
+                                  : () {
+                                      Clipboard.setData(
+                                          ClipboardData(text: model.serverId.text));
+                                      showToast(translate('Copied'));
+                                    },
+                            ),
+                          ]),
+                          Row(children: [
+                            const Icon(Icons.verified_user_outlined,
+                                size: 16, color: Color(0xFF5387D9)),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(translate('Secure access'))),
+                            TextButton(
+                              onPressed: () => DesktopTabPage.onAddSetting(
+                                  initialPage: SettingsTabKey.safety),
+                              child: Text(translate('Security settings')),
+                            ),
+                          ]),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => windowManager.hide(),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(44),
+                        backgroundColor: const Color(0xFF4D7DF1),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(translate('Finish and run in background')),
+                    ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(translate('Runs in system tray'),
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ),
         ),
       ),
     );
@@ -579,6 +713,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     super.initState();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
+      if (isMiuHostOnly) {
+        try {
+          final status = jsonDecode(await bind.mainGetConnectStatus())
+              as Map<String, dynamic>;
+          final ready = status['status_num'] == 1;
+          final sessions = status['video_conn_count'] as int? ?? 0;
+          if (ready != _miuHostReady || sessions != _miuHostSessions) {
+            _miuHostReady = ready;
+            _miuHostSessions = sessions;
+            if (mounted) setState(() {});
+          }
+        } catch (_) {}
+      }
       final error = await bind.mainGetError();
       if (systemError != error) {
         systemError = error;

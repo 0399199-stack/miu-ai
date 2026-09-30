@@ -52,13 +52,16 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         page: DesktopHomePage(
           key: const ValueKey(kTabLabelHomePage),
         )));
-    if (bind.isIncomingOnly()) {
+    if (bind.isIncomingOnly() || isMiuHostOnly) {
       tabController.onSelected = (key) {
         if (key == kTabLabelHomePage) {
-          windowManager.setSize(getIncomingOnlyHomeSize());
+          windowManager.setSize(
+              isMiuHostOnly ? miuHostHomeSize : getIncomingOnlyHomeSize());
           setResizable(false);
         } else {
-          windowManager.setSize(getIncomingOnlySettingsSize());
+          windowManager.setSize(isMiuHostOnly
+              ? const Size(768, 600)
+              : getIncomingOnlySettingsSize());
           setResizable(true);
         }
       };
@@ -91,13 +94,22 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isMiuMain = isWindows && bind.mainGetAppNameSync() == 'MiuAI';
     final tabWidget = Container(
         child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.background,
+            backgroundColor: isMiuMain
+                ? (Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF111A2D)
+                    : const Color(0xFFF8FAFF))
+                : Theme.of(context).colorScheme.background,
             body: DesktopTab(
               controller: tabController,
+              onOpenSettings:
+                  bind.isDisableSettings() ? null : DesktopTabPage.onAddSetting,
               tail: Offstage(
-                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
+                offstage: isMiuMain ||
+                    bind.isIncomingOnly() ||
+                    bind.isDisableSettings(),
                 child: ActionIcon(
                   message: 'Settings',
                   icon: IconFont.menu,

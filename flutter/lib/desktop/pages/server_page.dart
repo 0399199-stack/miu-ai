@@ -133,8 +133,10 @@ class ConnectionManagerState extends State<ConnectionManager>
         final client =
             gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == client_id);
         if (client != null) {
-          gFFI.chatModel.changeCurrentKey(MessageKey(client.peerId, client.id));
-          if (client.unreadChatMessageCount.value > 0) {
+          if (appName != 'MiuAI') {
+            gFFI.chatModel.changeCurrentKey(MessageKey(client.peerId, client.id));
+          }
+          if (appName != 'MiuAI' && client.unreadChatMessageCount.value > 0) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               client.unreadChatMessageCount.value = 0;
               gFFI.chatModel.showChatPage(MessageKey(client.peerId, client.id));
@@ -217,12 +219,15 @@ class ConnectionManagerState extends State<ConnectionManager>
                         message: key,
                         waitDuration: Duration(seconds: 1),
                         child: label),
-                    unreadMessageCountBuilder(client?.unreadChatMessageCount)
-                        .marginOnly(left: 4),
+                    if (appName != 'MiuAI')
+                      unreadMessageCountBuilder(client?.unreadChatMessageCount)
+                          .marginOnly(left: 4),
                   ],
                 );
               },
-              pageViewBuilder: (pageView) => LayoutBuilder(
+              pageViewBuilder: (pageView) => appName == 'MiuAI'
+                  ? pageView
+                  : LayoutBuilder(
                 builder: (context, constrains) {
                   var borderWidth = 0.0;
                   if (constrains.maxWidth >
@@ -555,7 +560,7 @@ class _CmHeaderState extends State<_CmHeader>
             ),
           ),
           Offstage(
-            offstage: !client.authorized ||
+            offstage: appName == 'MiuAI' || !client.authorized ||
                 (client.type_() != ClientType.remote &&
                     client.type_() != ClientType.file &&
                     client.type_() != ClientType.camera),
@@ -889,7 +894,7 @@ class _CmControlPanel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Offstage(
-          offstage: !client.inVoiceCall,
+          offstage: appName == 'MiuAI' || !client.inVoiceCall,
           child: Row(
             children: [
               Expanded(
@@ -975,7 +980,7 @@ class _CmControlPanel extends StatelessWidget {
           ),
         ),
         Offstage(
-          offstage: !client.incomingVoiceCall,
+          offstage: appName == 'MiuAI' || !client.incomingVoiceCall,
           child: Row(
             children: [
               Expanded(

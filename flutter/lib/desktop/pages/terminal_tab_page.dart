@@ -82,6 +82,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       isSharedPassword: params['isSharedPassword'],
       forceRelay: params['forceRelay'],
       connToken: params['connToken'],
+      initialCommand: params['initialCommand'],
     ));
   }
 
@@ -92,6 +93,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     bool? isSharedPassword,
     bool? forceRelay,
     String? connToken,
+    String? initialCommand,
   }) {
     final tabKey = '${peerId}_$terminalId';
     final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
@@ -118,6 +120,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         tabController: tabController,
         forceRelay: forceRelay,
         connToken: connToken,
+        initialCommand: initialCommand,
         onClipboardWriteBlocked: _canHandleTerminalClipboardWriteRequest
             ? (text) => _handleTerminalClipboardWriteBlocked(
                   clipboardSource,

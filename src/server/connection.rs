@@ -94,7 +94,7 @@ const MAX_UNAUTHORIZED_CONNS: usize = 64;
 /// address is the controller's own, which punch and relay messages carry today.
 const MAX_UNAUTHORIZED_CONNS_PER_ADDR: usize = 16;
 #[cfg(windows)]
-const DEFAULT_MIU_OVERLAY_COLOR: &str = "#00FF64";
+const DEFAULT_MIU_OVERLAY_COLOR: &str = "#8D7CF7";
 
 #[cfg(windows)]
 fn valid_miu_overlay_color(color: &str) -> bool {
@@ -3879,6 +3879,17 @@ impl Connection {
                             Config::set_option("miu-overlay-color".to_owned(), color);
                         }
                     }
+                    #[cfg(windows)]
+                    Some(misc::Union::MiuOverlayEnabled(enabled)) => {
+                        if self.authorized
+                            && self.authed_conn_type() == Some(AuthConnType::Remote)
+                        {
+                            Config::set_option(
+                                "miu-overlay-enabled".to_owned(),
+                                if enabled { "Y" } else { "N" }.to_owned(),
+                            );
+                        }
+                    }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if self.should_handle_render_broadcast_message() {
                             if r {
@@ -5612,6 +5623,11 @@ impl Connection {
     }
 
     #[cfg(windows)]
+    pub fn miu_overlay_enabled() -> bool {
+        Config::get_option("miu-overlay-enabled") != "N"
+    }
+
+    #[cfg(windows)]
     fn portable_check(&mut self) {
         if self.portable.is_installed || !self.is_remote() || !self.keyboard {
             return;
@@ -6162,6 +6178,7 @@ impl Connection {
             Some(misc::Union::FollowCurrentDisplay(_)) => "misc.follow_current_display",
             Some(misc::Union::SwitchSidesRequest(_)) => "misc.switch_sides_request",
             Some(misc::Union::MiuOverlayColor(_)) => "misc.miu_overlay_color",
+            Some(misc::Union::MiuOverlayEnabled(_)) => "misc.miu_overlay_enabled",
             Some(_) => "misc.other",
             None => "misc.empty",
         }
@@ -7663,6 +7680,27 @@ mod test {
         assert_scopes(
             AuthConnType::Remote,
             [(misc_msg(|m| m.set_miu_overlay_color("#5F8CFF".into())), None)],
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn miu_overlay_switch_requires_remote_scope() {
+        for conn_type in [
+            AuthConnType::FileTransfer,
+            AuthConnType::PortForward,
+            AuthConnType::ViewCamera,
+            AuthConnType::Terminal,
+        ] {
+            let msg = misc_msg(|m| m.set_miu_overlay_enabled(false));
+            assert_eq!(
+                Connection::authorized_message_scope_violation(conn_type, &msg),
+                Some("misc.miu_overlay_enabled")
+            );
+        }
+        assert_scopes(
+            AuthConnType::Remote,
+            [(misc_msg(|m| m.set_miu_overlay_enabled(false)), None)],
         );
     }
 

@@ -360,14 +360,17 @@ class RustDeskMultiWindowManager {
     bool? isSharedPassword,
     bool? forceRelay,
     String? connToken,
+    String? initialCommand,
   }) async {
     // Iterate through terminal windows in reverse order to prioritize
     // the most recently added or used windows, as they are more likely
     // to have an active session.
-    for (final windowId in _terminalWindows.reversed) {
-      if (await DesktopMultiWindow.invokeMethod(
-          windowId, kWindowEventActiveSession, remoteId)) {
-        return MultiWindowCallResult(windowId, null);
+    if (initialCommand == null) {
+      for (final windowId in _terminalWindows.reversed) {
+        if (await DesktopMultiWindow.invokeMethod(
+            windowId, kWindowEventActiveSession, remoteId)) {
+          return MultiWindowCallResult(windowId, null);
+        }
       }
     }
 
@@ -381,6 +384,7 @@ class RustDeskMultiWindowManager {
       "forceRelay": forceRelay,
       "isSharedPassword": isSharedPassword,
       "connToken": connToken,
+      "initialCommand": initialCommand,
     };
     final msg = jsonEncode(params);
 

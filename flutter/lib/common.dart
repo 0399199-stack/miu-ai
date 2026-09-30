@@ -2552,6 +2552,7 @@ connectMainDesktop(String id,
     String? password,
     String? connToken,
     bool? isSharedPassword}) async {
+  if (isMiuHostOnly) return;
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         password: password,
@@ -3847,18 +3848,7 @@ Widget loadLogo() => const _Logo();
 
 Widget loadIcon(double size) {
   if (isWindows && bind.mainGetAppNameSync() == 'MiuAI') {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.3),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6B8AF3), Color(0xFF9F87E8)],
-        ),
-      ),
-      child: Icon(Icons.auto_awesome_rounded,
-          size: size * 0.56, color: Colors.white),
-    );
+    return Image.asset('assets/icon.png', width: size, height: size);
   }
   return Image.asset('assets/icon.png',
       width: size,
@@ -4229,6 +4219,11 @@ String get appName {
   }
   return _appName;
 }
+
+bool get isMiuHostOnly =>
+    isWindows && appName == 'MiuAI' && bind.mainIsInstalled();
+
+const miuHostHomeSize = Size(520, 510);
 
 String getConnectionText(bool secure, bool direct, String streamType) {
   String connectionText;

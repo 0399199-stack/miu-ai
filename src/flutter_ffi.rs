@@ -593,6 +593,12 @@ pub fn session_set_miu_overlay_color(session_id: SessionID, color: String) {
     }
 }
 
+pub fn session_set_miu_overlay_enabled(session_id: SessionID, enabled: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_miu_overlay_enabled(enabled);
+    }
+}
+
 pub fn session_get_trackpad_speed(session_id: SessionID) -> Option<i32> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_trackpad_speed())

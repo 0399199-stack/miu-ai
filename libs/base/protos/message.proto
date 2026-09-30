@@ -868,6 +868,7 @@ message Misc {
     // by id again, so the shape just selected is always there to give.
     uint64 request_cursor_data = 39;
     string miu_overlay_color = 40;
+    bool miu_overlay_enabled = 41;
   }
 }
 

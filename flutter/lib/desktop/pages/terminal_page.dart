@@ -19,6 +19,7 @@ class TerminalPage extends StatefulWidget {
     required this.tabKey,
     this.forceRelay,
     this.connToken,
+    this.initialCommand,
     this.onClipboardWriteBlocked,
     this.onClipboardWriteSucceeded,
   }) : super(key: key);
@@ -28,6 +29,7 @@ class TerminalPage extends StatefulWidget {
   final bool? forceRelay;
   final bool? isSharedPassword;
   final String? connToken;
+  final String? initialCommand;
   final ValueChanged<String>? onClipboardWriteBlocked;
   final ValueChanged<String>? onClipboardWriteSucceeded;
   final int terminalId;
@@ -75,6 +77,9 @@ class _TerminalPageState extends State<TerminalPage>
 
     // Create terminal model with specific terminal ID
     _terminalModel = TerminalModel(_ffi, widget.terminalId);
+    if (widget.initialCommand != null) {
+      _terminalModel.pasteText('${widget.initialCommand}\r');
+    }
     _terminalModel.onClipboardWriteBlocked = widget.onClipboardWriteBlocked;
     _terminalModel.onClipboardWriteSucceeded = widget.onClipboardWriteSucceeded;
     debugPrint(

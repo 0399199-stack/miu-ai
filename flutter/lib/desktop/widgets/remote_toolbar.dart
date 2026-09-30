@@ -4,12 +4,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
-import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -842,6 +841,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_ViewOnlyButton(id: widget.id, ffi: widget.ffi));
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
+      if (!isWeb && !viewOnly && widget.ffi.ffiModel.isPeerWindows &&
+          widget.ffi.ffiModel.keyboard) {
+        toolbarItems.add(_MiuTasksMenu(ffi: widget.ffi));
+      }
     }
     toolbarItems.add(_DisplayMenu(
       id: widget.id,
@@ -852,12 +855,6 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     // Do not show keyboard for camera connection type.
     if (widget.ffi.connType == ConnType.defaultConn && !viewOnly) {
       toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
-    }
-    if (!viewOnly) {
-      toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
-    }
-    if (!isWeb && !viewOnly) {
-      toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
@@ -2595,10 +2592,11 @@ class _GlowColorMenu extends StatelessWidget {
       return const Offstage();
     }
     const presets = [
-      ('Miu green', '#00FF64', Color(0xFF00FF64)),
+      ('Soft indigo', '#8D7CF7', Color(0xFF8D7CF7)),
       ('Mist blue', '#5F8CFF', Color(0xFF5F8CFF)),
       ('Soft violet', '#A179FF', Color(0xFFA179FF)),
       ('Blush pink', '#FF78AF', Color(0xFFFF78AF)),
+      ('Miu green', '#00FF64', Color(0xFF00FF64)),
     ];
     return _IconSubmenuButton(
       tooltip: translate('Glow color'),
@@ -2616,6 +2614,19 @@ class _GlowColorMenu extends StatelessWidget {
       hoverColor: _ToolbarTheme.hoverBlueColor,
       ffi: ffi,
       menuChildrenGetter: (_) => [
+        MenuButton(
+          ffi: ffi,
+          onPressed: () => bind.sessionSetMiuOverlayEnabled(
+              sessionId: ffi.sessionId, enabled: true),
+          child: Text(translate('Turn on glow')),
+        ),
+        MenuButton(
+          ffi: ffi,
+          onPressed: () => bind.sessionSetMiuOverlayEnabled(
+              sessionId: ffi.sessionId, enabled: false),
+          child: Text(translate('Turn off glow')),
+        ),
+        const Divider(),
         for (final (name, hex, color) in presets)
           MenuButton(
             ffi: ffi,
@@ -2639,7 +2650,7 @@ class _GlowColorMenu extends StatelessWidget {
         MenuButton(
           ffi: ffi,
           onPressed: () async {
-            const initial = Color(0xFF5F8CFF);
+            const initial = Color(0xFF8D7CF7);
             final chosen = await showColorPickerDialog(
               context,
               initial,
@@ -2664,6 +2675,149 @@ class _GlowColorMenu extends StatelessWidget {
           },
           child: Text(translate('Custom color')),
         ),
+      ],
+    );
+  }
+}
+
+enum _MiuTaskKind { website, program, command }
+
+class _MiuTasksMenu extends StatelessWidget {
+  final FFI ffi;
+
+  const _MiuTasksMenu({required this.ffi});
+
+  String _title(_MiuTaskKind kind) {
+    switch (kind) {
+      case _MiuTaskKind.website:
+        return translate('Open website');
+      case _MiuTaskKind.program:
+        return translate('Open program');
+      case _MiuTaskKind.command:
+        return translate('Run command');
+    }
+  }
+
+  String _hint(_MiuTaskKind kind) {
+    switch (kind) {
+      case _MiuTaskKind.website:
+        return 'https://example.com';
+      case _MiuTaskKind.program:
+        return 'notepad.exe';
+      case _MiuTaskKind.command:
+        return 'dir C:\\';
+    }
+  }
+
+  Future<void> _promptTask(BuildContext context, _MiuTaskKind kind) async {
+    final controller = TextEditingController();
+    String? error;
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFFF8F8FD).withOpacity(0.96),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: Text(_title(kind)),
+          content: SizedBox(
+            width: 420,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 1,
+              inputFormatters: [LengthLimitingTextInputFormatter(2048)],
+              keyboardType: kind == _MiuTaskKind.website
+                  ? TextInputType.url
+                  : TextInputType.text,
+              decoration: InputDecoration(
+                hintText: _hint(kind),
+                errorText: error,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              onSubmitted: (_) => _submitTask(
+                  dialogContext, setDialogState, controller.text, kind,
+                  (message) => error = message),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(translate('Cancel'))),
+            FilledButton(
+                onPressed: () => _submitTask(
+                    dialogContext, setDialogState, controller.text, kind,
+                    (message) => error = message),
+                child: Text(translate('Run'))),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (value == null || !ffi.ffiModel.keyboard || ffi.ffiModel.viewOnly ||
+        !ffi.ffiModel.isPeerWindows) return;
+    if (kind == _MiuTaskKind.command) {
+      await rustDeskWinManager.newTerminal(ffi.id, initialCommand: value);
+    } else {
+      await _openWindowsRun(value);
+    }
+  }
+
+  void _submitTask(BuildContext dialogContext, StateSetter setDialogState,
+      String rawValue, _MiuTaskKind kind, ValueChanged<String?> setError) {
+    final value = rawValue.trim();
+    String? error;
+    if (value.isEmpty || value.contains('\n') || value.contains('\r')) {
+      error = translate('Enter one line');
+    } else if (kind == _MiuTaskKind.website) {
+      final uri = Uri.tryParse(value);
+      if (uri == null || !['http', 'https'].contains(uri.scheme) ||
+          uri.host.isEmpty) {
+        error = translate('Enter an HTTP(S) address');
+      }
+    }
+    if (error != null) {
+      setDialogState(() => setError(error));
+      return;
+    }
+    Navigator.pop(dialogContext, value);
+  }
+
+  Future<void> _openWindowsRun(String value) async {
+    await bind.sessionInputKey(
+        sessionId: ffi.sessionId, name: 'r', down: false, press: true,
+        alt: false, ctrl: false, shift: false, command: true);
+    await Future.delayed(const Duration(milliseconds: 700));
+    await bind.sessionInputString(sessionId: ffi.sessionId, value: value);
+    await bind.sessionInputKey(
+        sessionId: ffi.sessionId, name: 'VK_ENTER', down: false, press: true,
+        alt: false, ctrl: false, shift: false, command: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconSubmenuButton(
+      tooltip: translate('Quick tasks'),
+      icon: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.bolt_outlined, size: 18, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(translate('Tasks'),
+              style: const TextStyle(fontSize: 12, color: Colors.white)),
+        ],
+      ),
+      width: 75,
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+      ffi: ffi,
+      menuChildrenGetter: (_) => [
+        for (final kind in _MiuTaskKind.values)
+          MenuButton(
+            ffi: ffi,
+            onPressed: () => _promptTask(context, kind),
+            child: Text(_title(kind)),
+          ),
       ],
     );
   }
@@ -2932,160 +3086,6 @@ class _KeyboardMenu extends StatelessWidget {
           onPressed: () => ffi.inputModel.onMobilePower(),
           ffi: ffi),
     ];
-  }
-}
-
-class _ChatMenu extends StatefulWidget {
-  final String id;
-  final FFI ffi;
-  _ChatMenu({
-    Key? key,
-    required this.id,
-    required this.ffi,
-  }) : super(key: key);
-
-  @override
-  State<_ChatMenu> createState() => _ChatMenuState();
-}
-
-class _ChatMenuState extends State<_ChatMenu> {
-  // Using in StatelessWidget got `Looking up a deactivated widget's ancestor is unsafe`.
-  final chatButtonKey = GlobalKey();
-
-  @override
-  Widget build(BuildContext context) {
-    if (isWeb) {
-      return buildTextChatButton();
-    } else {
-      return _IconSubmenuButton(
-          tooltip: 'Chat',
-          key: chatButtonKey,
-          svg: 'assets/chat.svg',
-          ffi: widget.ffi,
-          color: _ToolbarTheme.blueColor,
-          hoverColor: _ToolbarTheme.hoverBlueColor,
-          menuChildrenGetter: (_) => [textChat(), voiceCall()]);
-    }
-  }
-
-  buildTextChatButton() {
-    return _IconMenuButton(
-      assetName: 'assets/message_24dp_5F6368.svg',
-      tooltip: 'Text chat',
-      key: chatButtonKey,
-      onPressed: _textChatOnPressed,
-      color: _ToolbarTheme.blueColor,
-      hoverColor: _ToolbarTheme.hoverBlueColor,
-    );
-  }
-
-  textChat() {
-    return MenuButton(
-        child: Text(translate('Text chat')),
-        ffi: widget.ffi,
-        onPressed: _textChatOnPressed);
-  }
-
-  _textChatOnPressed() {
-    RenderBox? renderBox =
-        chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    Offset? initPos;
-    if (renderBox != null) {
-      final pos = renderBox.localToGlobal(Offset.zero);
-      initPos = Offset(pos.dx, pos.dy + _ToolbarTheme.dividerHeight);
-    }
-    widget.ffi.chatModel
-        .changeCurrentKey(MessageKey(widget.ffi.id, ChatModel.clientModeID));
-    widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
-  }
-
-  voiceCall() {
-    return MenuButton(
-      child: Text(translate('Voice call')),
-      ffi: widget.ffi,
-      onPressed: () =>
-          bind.sessionRequestVoiceCall(sessionId: widget.ffi.sessionId),
-    );
-  }
-}
-
-class _VoiceCallMenu extends StatelessWidget {
-  final String id;
-  final FFI ffi;
-  _VoiceCallMenu({
-    Key? key,
-    required this.id,
-    required this.ffi,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    menuChildrenGetter(_IconSubmenuButtonState state) {
-      final audioInput = AudioInput(
-        builder: (devices, currentDevice, setDevice) {
-          return Column(
-            children: devices
-                .map((d) => RdoMenuButton<String>(
-                      child: Container(
-                        child: Text(
-                          d,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        constraints: BoxConstraints(maxWidth: 250),
-                      ),
-                      value: d,
-                      groupValue: currentDevice,
-                      onChanged: (v) {
-                        if (v != null) setDevice(v);
-                      },
-                      ffi: ffi,
-                    ))
-                .toList(),
-          );
-        },
-        isCm: false,
-        isVoiceCall: true,
-      );
-      return [
-        audioInput,
-        Divider(),
-        MenuButton(
-          child: Text(translate('End call')),
-          onPressed: () => bind.sessionCloseVoiceCall(sessionId: ffi.sessionId),
-          ffi: ffi,
-        ),
-      ];
-    }
-
-    return Obx(
-      () {
-        switch (ffi.chatModel.voiceCallStatus.value) {
-          case VoiceCallStatus.waitingForResponse:
-            return buildCallWaiting(context);
-          case VoiceCallStatus.connected:
-            return _IconSubmenuButton(
-              tooltip: 'Voice call',
-              svg: 'assets/voice_call.svg',
-              color: _ToolbarTheme.blueColor,
-              hoverColor: _ToolbarTheme.hoverBlueColor,
-              menuChildrenGetter: menuChildrenGetter,
-              ffi: ffi,
-            );
-          default:
-            return Offstage();
-        }
-      },
-    );
-  }
-
-  Widget buildCallWaiting(BuildContext context) {
-    return _IconMenuButton(
-      assetName: "assets/call_wait.svg",
-      tooltip: "Waiting",
-      onPressed: () => bind.sessionCloseVoiceCall(sessionId: ffi.sessionId),
-      color: _ToolbarTheme.redColor,
-      hoverColor: _ToolbarTheme.hoverRedColor,
-    );
   }
 }
 

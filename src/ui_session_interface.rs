@@ -523,6 +523,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    pub fn set_miu_overlay_enabled(&self, enabled: bool) {
+        let mut misc = Misc::new();
+        misc.set_miu_overlay_enabled(enabled);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
     pub fn get_remember(&self) -> bool {
         self.lc.read().unwrap().remember
     }

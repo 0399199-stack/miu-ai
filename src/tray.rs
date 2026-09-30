@@ -180,7 +180,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
     #[cfg(windows)]
     let mut miu_overlay: Option<std::process::Child> = None;
     #[cfg(windows)]
-    let mut miu_overlay_color = "#00FF64".to_owned();
+    let mut miu_overlay_color = "#8D7CF7".to_owned();
     #[cfg(windows)]
     let mut overlay_launch_error_reported = false;
     #[cfg(target_os = "macos")]
@@ -278,11 +278,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
         {
             let mut latest_state = None;
             while let Ok(data) = ipc_receiver.try_recv() {
-                if let Data::MiuOverlayState { count, color } = data {
-                    latest_state = Some((count, color));
+                if let Data::MiuOverlayState { count, color, enabled } = data {
+                    latest_state = Some((count, color, enabled));
                 }
             }
-            if let Some((count, color)) = latest_state {
+            if let Some((count, color, enabled)) = latest_state {
                 if color != miu_overlay_color {
                     stop_miu_overlay(&mut miu_overlay);
                     if miu_overlay.is_none() {
@@ -295,6 +295,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
                     .as_mut()
                     .map(|t| t.set_tooltip(Some(tooltip(count))));
                 if count == 0
+                    || !enabled
                     || crate::platform::is_prelogin()
                     || crate::platform::windows::is_locked()
                 {
@@ -357,22 +358,22 @@ async fn start_query_overlay_state(sender: std::sync::mpsc::Sender<Data>) {
                             }
                             Ok(None) => break,
 
-                            Ok(Some(Data::MiuOverlayState { count, color })) => {
-                                sender.send(Data::MiuOverlayState { count, color }).ok();
+                            Ok(Some(Data::MiuOverlayState { count, color, enabled })) => {
+                                sender.send(Data::MiuOverlayState { count, color, enabled }).ok();
                             }
                             _ => {}
                         }
                     }
 
                     _ = timer.tick() => {
-                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new() }).await.is_err() {
+                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new(), enabled: true }).await.is_err() {
                             break;
                         }
                     }
                 }
             }
         }
-        sender.send(Data::MiuOverlayState { count: 0, color: "#00FF64".to_owned() }).ok();
+        sender.send(Data::MiuOverlayState { count: 0, color: "#8D7CF7".to_owned(), enabled: true }).ok();
         hbb_common::sleep(1.).await;
     }
 }

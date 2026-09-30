@@ -20,7 +20,43 @@ class MiuBackdrop extends StatelessWidget {
               : const [Color(0xFFF8FAFF), Color(0xFFEFF3FC), Color(0xFFF5F0FA)],
         ),
       ),
-      child: child,
+      child: Stack(
+        children: [
+          Positioned(
+            top: -180,
+            right: -110,
+            child: IgnorePointer(
+              child: Container(
+                width: 520,
+                height: 520,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: dark
+                      ? [const Color(0xFF5976D9).withOpacity(0.18), Colors.transparent]
+                      : [const Color(0xFFA8C8FF).withOpacity(0.65), Colors.transparent]),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -230,
+            left: -100,
+            child: IgnorePointer(
+              child: Container(
+                width: 560,
+                height: 560,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: dark
+                      ? [const Color(0xFF886EC9).withOpacity(0.13), Colors.transparent]
+                      : [const Color(0xFFD8C9FF).withOpacity(0.5), Colors.transparent]),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(child: child),
+        ],
+      ),
     );
   }
 }
