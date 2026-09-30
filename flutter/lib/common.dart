@@ -248,10 +248,10 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
 class MyTheme {
   MyTheme._();
 
-  static const Color grayBg = Color(0xFFEFEFF2);
-  static const Color accent = Color(0xFF0071FF);
-  static const Color accent50 = Color(0x770071FF);
-  static const Color accent80 = Color(0xAA0071FF);
+  static const Color grayBg = Color(0xFFF0F3FA);
+  static const Color accent = Color(0xFF647FE8);
+  static const Color accent50 = Color(0x77647FE8);
+  static const Color accent80 = Color(0xAA647FE8);
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
@@ -374,8 +374,8 @@ class MyTheme {
     useMaterial3: false,
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
-    scaffoldBackgroundColor: Colors.white,
-    dialogBackgroundColor: Colors.white,
+    scaffoldBackgroundColor: Color(0xFFF8FAFF),
+    dialogBackgroundColor: Color(0xFFF8FAFF),
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
@@ -472,8 +472,8 @@ class MyTheme {
     useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
-    scaffoldBackgroundColor: Color(0xFF18191E),
-    dialogBackgroundColor: Color(0xFF18191E),
+    scaffoldBackgroundColor: Color(0xFF121827),
+    dialogBackgroundColor: Color(0xFF121827),
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
@@ -2065,6 +2065,17 @@ Future<bool> restoreWindowPosition(WindowType type,
         // See https://github.com/rustdesk/rustdesk/blob/9b9276e7524523d7f667fefcd0694d981443df0e/flutter/macos/Runner/Base.lproj/MainMenu.xib#L333
         // If `<windowPositionMask>` in `<window>` is not set, the window will be centered.
         break;
+      case WindowType.RemoteDesktop:
+        if (isWindows) {
+          final wc = WindowController.fromWindowId(windowId!);
+          await wc.setFullscreen(false);
+          await wc.unmaximize();
+          if (stateGlobal.windowId == windowId) {
+            stateGlobal.setFullscreen(false, procWnd: false);
+            stateGlobal.setMaximized(false);
+          }
+        }
+        break;
       default:
         // No need to change the position of a sub window if no position is saved,
         // since the default position is already centered.
@@ -2154,7 +2165,15 @@ Future<bool> restoreWindowPosition(WindowType type,
           await wc.setFrame(frame);
         }
       }
-      if (lpos.isFullscreen == true) {
+      if (type == WindowType.RemoteDesktop && isWindows) {
+        await wc.setFullscreen(false);
+        await wc.unmaximize();
+        if (stateGlobal.windowId == windowId) {
+          stateGlobal.setFullscreen(false, procWnd: false);
+          stateGlobal.setMaximized(false);
+        }
+        await restoreFrame();
+      } else if (lpos.isFullscreen == true) {
         if (!isMacOS) {
           await restoreFrame();
         }
@@ -2529,6 +2548,7 @@ connectMainDesktop(String id,
     required bool isTcpTunneling,
     required bool isRDP,
     bool? forceRelay,
+    bool viewOnly = false,
     String? password,
     String? connToken,
     bool? isSharedPassword}) async {
@@ -2560,7 +2580,8 @@ connectMainDesktop(String id,
     await rustDeskWinManager.newRemoteDesktop(id,
         password: password,
         isSharedPassword: isSharedPassword,
-        forceRelay: forceRelay);
+        forceRelay: forceRelay,
+        viewOnly: viewOnly);
   }
 }
 
@@ -2576,6 +2597,7 @@ connect(BuildContext context, String id,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool forceRelay = false,
+    bool viewOnly = false,
     String? password,
     String? connToken,
     bool? isSharedPassword}) async {
@@ -2608,6 +2630,7 @@ connect(BuildContext context, String id,
         isTerminal: isTerminal,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
+        viewOnly: viewOnly,
         password: password,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay,
@@ -2620,6 +2643,7 @@ connect(BuildContext context, String id,
         'isTerminal': isTerminal,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
+        'viewOnly': viewOnly,
         'password': password,
         'isSharedPassword': isSharedPassword,
         'forceRelay': forceRelay,
@@ -3822,6 +3846,20 @@ class _LogoState extends State<_Logo> {
 Widget loadLogo() => const _Logo();
 
 Widget loadIcon(double size) {
+  if (isWindows && bind.mainGetAppNameSync() == 'MiuAI') {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.3),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6B8AF3), Color(0xFF9F87E8)],
+        ),
+      ),
+      child: Icon(Icons.auto_awesome_rounded,
+          size: size * 0.56, color: Colors.white),
+    );
+  }
   return Image.asset('assets/icon.png',
       width: size,
       height: size,

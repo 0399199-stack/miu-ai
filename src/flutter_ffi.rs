@@ -157,6 +157,7 @@ pub fn session_add_sync(
     force_relay: bool,
     password: String,
     is_shared_password: bool,
+    view_only: bool,
     conn_token: Option<String>,
 ) -> SyncReturn<String> {
     let add_res = session_add(
@@ -177,6 +178,16 @@ pub fn session_add_sync(
     // Because there are some `bail!` in `session_add()`, we must make sure `IS_TERMINAL_ADMIN` is removed at last.
     if is_terminal {
         std::env::remove_var("IS_TERMINAL_ADMIN");
+    }
+
+    if let Ok(session) = &add_res {
+        if !(is_file_transfer || is_view_camera || is_port_forward || is_rdp || is_terminal) {
+            #[cfg(windows)]
+            session.save_view_style("adaptive".to_owned());
+            if session.get_toggle_option("view-only".to_owned()) != view_only {
+                session_toggle_option(session_id, "view-only".to_owned());
+            }
+        }
     }
 
     if let Err(e) = add_res {
@@ -573,6 +584,12 @@ pub fn session_set_custom_image_quality(session_id: SessionID, value: i32) {
 pub fn session_set_custom_fps(session_id: SessionID, fps: i32) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.set_custom_fps(fps);
+    }
+}
+
+pub fn session_set_miu_overlay_color(session_id: SessionID, color: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_miu_overlay_color(color);
     }
 }
 

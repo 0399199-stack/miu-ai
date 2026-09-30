@@ -102,6 +102,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           switchUuid: params['switch_uuid'],
           forceRelay: params['forceRelay'],
           isSharedPassword: params['isSharedPassword'],
+          viewOnly: params['viewOnly'] == true,
         ),
       ));
       _update_remote_count();
@@ -286,7 +287,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       menu.insert(1, splitAction);
     }
 
-    if (perms['restart'] != false &&
+    if (!ffi.ffiModel.viewOnly &&
+        perms['restart'] != false &&
         (pi.platform == kPeerPlatformLinux ||
             pi.platform == kPeerPlatformWindows ||
             pi.platform == kPeerPlatformMacOS)) {
@@ -475,6 +477,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           switchUuid: switchUuid,
           forceRelay: args['forceRelay'],
           isSharedPassword: args['isSharedPassword'],
+          viewOnly: args['viewOnly'] == true,
         ),
       ));
     } else if (call.method == kWindowDisableGrabKeyboard) {
@@ -484,8 +487,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     } else if (call.method == kWindowActionRebuild) {
       reloadCurrentWindow();
     } else if (call.method == kWindowEventActiveSession) {
-      final jumpOk = tabController.jumpToByKey(call.arguments);
+      final args = call.arguments;
+      final String id = args is Map ? args['id'] as String : args as String;
+      final jumpOk = tabController.jumpToByKey(id);
       if (jumpOk) {
+        if (args is Map) {
+          final remotePage = tabController.widget(id) as RemotePage;
+          await setRemoteViewOnly(
+              remotePage.ffi, id, args['viewOnly'] == true);
+        }
         windowOnTop(windowId());
       }
       return jumpOk;

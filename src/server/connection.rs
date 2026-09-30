@@ -93,6 +93,15 @@ const MAX_UNAUTHORIZED_CONNS: usize = 64;
 /// of addresses passes it, and the bound above is what holds. Meaningful only while the
 /// address is the controller's own, which punch and relay messages carry today.
 const MAX_UNAUTHORIZED_CONNS_PER_ADDR: usize = 16;
+#[cfg(windows)]
+const DEFAULT_MIU_OVERLAY_COLOR: &str = "#00FF64";
+
+#[cfg(windows)]
+fn valid_miu_overlay_color(color: &str) -> bool {
+    let bytes = color.as_bytes();
+    bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
+}
+
 /// The largest message a connection may send before it authorizes. Until then a peer sends only
 /// a public key, a login request, a test delay and a close reason, none of which carries an
 /// unbounded field - a server hands the login request's avatar out as a URL, and only a custom
@@ -3861,6 +3870,15 @@ impl Connection {
                             self.update_options(&option).await;
                         }
                     }
+                    #[cfg(windows)]
+                    Some(misc::Union::MiuOverlayColor(color)) => {
+                        if self.authorized
+                            && self.authed_conn_type() == Some(AuthConnType::Remote)
+                            && valid_miu_overlay_color(&color)
+                        {
+                            Config::set_option("miu-overlay-color".to_owned(), color);
+                        }
+                    }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if self.should_handle_render_broadcast_message() {
                             if r {
@@ -5579,13 +5597,18 @@ impl Connection {
             .lock()
             .unwrap()
             .iter()
-            .filter(|c| {
-                matches!(
-                    c.conn_type,
-                    AuthConnType::Remote | AuthConnType::FileTransfer | AuthConnType::Terminal
-                )
-            })
+            .filter(|c| matches!(c.conn_type, AuthConnType::Remote))
             .count()
+    }
+
+    #[cfg(windows)]
+    pub fn miu_overlay_color() -> String {
+        let color = Config::get_option("miu-overlay-color");
+        if valid_miu_overlay_color(&color) {
+            color
+        } else {
+            DEFAULT_MIU_OVERLAY_COLOR.to_owned()
+        }
     }
 
     #[cfg(windows)]
@@ -6138,6 +6161,7 @@ impl Connection {
             Some(misc::Union::MessageQuery(_)) => "misc.message_query",
             Some(misc::Union::FollowCurrentDisplay(_)) => "misc.follow_current_display",
             Some(misc::Union::SwitchSidesRequest(_)) => "misc.switch_sides_request",
+            Some(misc::Union::MiuOverlayColor(_)) => "misc.miu_overlay_color",
             Some(_) => "misc.other",
             None => "misc.empty",
         }
@@ -7615,6 +7639,31 @@ mod test {
                 expected
             );
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn miu_overlay_color_requires_remote_scope_and_hex_rgb() {
+        assert!(valid_miu_overlay_color("#5F8CFF"));
+        for color in ["#fff", "5F8CFF", "#GG0000", "#00000000", "#00000;"] {
+            assert!(!valid_miu_overlay_color(color));
+        }
+        for conn_type in [
+            AuthConnType::FileTransfer,
+            AuthConnType::PortForward,
+            AuthConnType::ViewCamera,
+            AuthConnType::Terminal,
+        ] {
+            let msg = misc_msg(|m| m.set_miu_overlay_color("#5F8CFF".into()));
+            assert_eq!(
+                Connection::authorized_message_scope_violation(conn_type, &msg),
+                Some("misc.miu_overlay_color")
+            );
+        }
+        assert_scopes(
+            AuthConnType::Remote,
+            [(misc_msg(|m| m.set_miu_overlay_color("#5F8CFF".into())), None)],
+        );
     }
 
     #[test]

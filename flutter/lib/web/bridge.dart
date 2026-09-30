@@ -147,6 +147,7 @@ class RustdeskImpl {
       required bool forceRelay,
       required String password,
       required bool isSharedPassword,
+      bool viewOnly = false,
       String? connToken,
       dynamic hint}) {
     return js.context.callMethod('setByName', [
@@ -155,6 +156,7 @@ class RustdeskImpl {
         'id': id,
         'password': password,
         'is_shared_password': isSharedPassword,
+        'view_only': viewOnly,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
         'isTerminal': isTerminal
@@ -453,6 +455,11 @@ class RustdeskImpl {
       {required UuidValue sessionId, required int fps, dynamic hint}) {
     return Future(
         () => js.context.callMethod('setByName', ['custom-fps', fps]));
+  }
+
+  Future<void> sessionSetMiuOverlayColor(
+      {required UuidValue sessionId, required String color, dynamic hint}) {
+    throw UnimplementedError('sessionSetMiuOverlayColor');
   }
 
   Future<void> sessionLockScreen({required UuidValue sessionId, dynamic hint}) {

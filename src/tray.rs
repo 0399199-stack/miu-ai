@@ -26,6 +26,26 @@ pub fn start_tray() {
     allow_err!(make_tray());
 }
 
+#[cfg(windows)]
+fn stop_miu_overlay(overlay: &mut Option<std::process::Child>) {
+    let Some(child) = overlay.as_mut() else {
+        return;
+    };
+    match child.try_wait() {
+        Ok(Some(_)) => {
+            overlay.take();
+        }
+        Ok(None) => match child.kill() {
+            Ok(()) => {
+                let _ = child.wait();
+                overlay.take();
+            }
+            Err(err) => log::warn!("Cannot stop Miu overlay: {}", err),
+        },
+        Err(err) => log::warn!("Cannot inspect Miu overlay: {}", err),
+    }
+}
+
 fn make_tray() -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
@@ -155,10 +175,12 @@ fn make_tray() -> hbb_common::ResultType<()> {
 
     #[cfg(windows)]
     std::thread::spawn(move || {
-        start_query_session_count(ipc_sender.clone());
+        start_query_overlay_state(ipc_sender.clone());
     });
     #[cfg(windows)]
     let mut miu_overlay: Option<std::process::Child> = None;
+    #[cfg(windows)]
+    let mut miu_overlay_color = "#00FF64".to_owned();
     #[cfg(windows)]
     let mut overlay_launch_error_reported = false;
     #[cfg(target_os = "macos")]
@@ -253,55 +275,67 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
 
         #[cfg(windows)]
-        if let Ok(data) = ipc_receiver.try_recv() {
-            match data {
-                Data::MiuAuthorizedSessionCount(count) => {
-                    _tray_icon
-                        .lock()
-                        .unwrap()
-                        .as_mut()
-                        .map(|t| t.set_tooltip(Some(tooltip(count))));
-                    if count == 0
-                        || crate::platform::is_prelogin()
-                        || crate::platform::windows::is_locked()
-                    {
-                        if let Some(mut child) = miu_overlay.take() {
-                            let _ = child.kill();
-                            let _ = child.wait();
+        {
+            let mut latest_state = None;
+            while let Ok(data) = ipc_receiver.try_recv() {
+                if let Data::MiuOverlayState { count, color } = data {
+                    latest_state = Some((count, color));
+                }
+            }
+            if let Some((count, color)) = latest_state {
+                if color != miu_overlay_color {
+                    stop_miu_overlay(&mut miu_overlay);
+                    if miu_overlay.is_none() {
+                        miu_overlay_color = color;
+                    }
+                }
+                _tray_icon
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .map(|t| t.set_tooltip(Some(tooltip(count))));
+                if count == 0
+                    || crate::platform::is_prelogin()
+                    || crate::platform::windows::is_locked()
+                {
+                    stop_miu_overlay(&mut miu_overlay);
+                    overlay_launch_error_reported = false;
+                } else if miu_overlay
+                    .as_mut()
+                    .map_or(true, |child| match child.try_wait() {
+                        Ok(None) => false,
+                        Ok(Some(_)) => true,
+                        Err(err) => {
+                            log::warn!("Cannot inspect Miu overlay: {}", err);
+                            false
                         }
-                        overlay_launch_error_reported = false;
-                    } else if miu_overlay
-                        .as_mut()
-                        .map_or(true, |child| !matches!(child.try_wait(), Ok(None)))
+                    })
+                {
+                    miu_overlay.take();
+                    if let Some(path) = std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.parent().map(|dir| dir.join("MiuOverlay.exe")))
                     {
-                        if let Some(mut child) = miu_overlay.take() {
-                            let _ = child.kill();
-                            let _ = child.wait();
-                        }
-                        if let Some(path) = std::env::current_exe()
-                            .ok()
-                            .and_then(|p| p.parent().map(|dir| dir.join("MiuOverlay.exe")))
+                        match std::process::Command::new(&path)
+                            .arg("--no-tray")
+                            .arg("--color")
+                            .arg(&miu_overlay_color)
+                            .arg("--parent-pid")
+                            .arg(std::process::id().to_string())
+                            .spawn()
                         {
-                            match std::process::Command::new(&path)
-                                .arg("--no-tray")
-                                .arg("--parent-pid")
-                                .arg(std::process::id().to_string())
-                                .spawn()
-                            {
-                                Ok(child) => {
-                                    miu_overlay = Some(child);
-                                    overlay_launch_error_reported = false;
-                                }
-                                Err(err) if !overlay_launch_error_reported => {
-                                    log::warn!("Cannot start Miu overlay at {:?}: {}", path, err);
-                                    overlay_launch_error_reported = true;
-                                }
-                                Err(_) => {}
+                            Ok(child) => {
+                                miu_overlay = Some(child);
+                                overlay_launch_error_reported = false;
                             }
+                            Err(err) if !overlay_launch_error_reported => {
+                                log::warn!("Cannot start Miu overlay at {:?}: {}", path, err);
+                                overlay_launch_error_reported = true;
+                            }
+                            Err(_) => {}
                         }
                     }
                 }
-                _ => {}
             }
         }
     });
@@ -309,7 +343,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
 
 #[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
-async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
+async fn start_query_overlay_state(sender: std::sync::mpsc::Sender<Data>) {
     loop {
         if let Ok(mut c) = crate::ipc::connect(1000, "").await {
             let mut timer = crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
@@ -323,22 +357,22 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
                             }
                             Ok(None) => break,
 
-                            Ok(Some(Data::MiuAuthorizedSessionCount(count))) => {
-                                sender.send(Data::MiuAuthorizedSessionCount(count)).ok();
+                            Ok(Some(Data::MiuOverlayState { count, color })) => {
+                                sender.send(Data::MiuOverlayState { count, color }).ok();
                             }
                             _ => {}
                         }
                     }
 
                     _ = timer.tick() => {
-                        if c.send(&Data::MiuAuthorizedSessionCount(0)).await.is_err() {
+                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new() }).await.is_err() {
                             break;
                         }
                     }
                 }
             }
         }
-        sender.send(Data::MiuAuthorizedSessionCount(0)).ok();
+        sender.send(Data::MiuOverlayState { count: 0, color: "#00FF64".to_owned() }).ok();
         hbb_common::sleep(1.).await;
     }
 }

@@ -342,6 +342,8 @@ internal static class Program
             else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--brightness 0..100] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--parent-pid N]");
         }
         if (preview != null) { Overlay.SavePreview(preview, color, brightness); return; }
+        // Live overlays must belong to the tray; an accidental manual launch cannot outlive a session.
+        if (parentPid <= 0 && verify == null && demoSeconds == 0) return;
         Application.EnableVisualStyles();
         bool created;
         using (var mutex = new System.Threading.Mutex(true, @"Local\MiuAIOverlay", out created))

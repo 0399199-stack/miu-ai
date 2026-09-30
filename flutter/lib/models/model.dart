@@ -4110,6 +4110,7 @@ class FFI {
     String? switchUuid,
     String? password,
     bool? isSharedPassword,
+    bool viewOnly = false,
     String? connToken,
     bool? forceRelay,
     int? tabWindowId,
@@ -4159,6 +4160,7 @@ class FFI {
         forceRelay: forceRelay ?? false,
         password: password ?? '',
         isSharedPassword: isSharedPassword ?? false,
+        viewOnly: viewOnly,
         connToken: connToken,
       );
     } else if (display != null) {

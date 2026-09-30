@@ -32,6 +32,11 @@ class ServerModel with ChangeNotifier {
   bool _clipboardOk = false;
   bool _showElevation = false;
   bool hideCm = false;
+  bool get _miuQuietHost => isWindows && bind.mainGetAppNameSync() == 'MiuAI';
+  bool get _showCmForClients => _miuQuietHost
+      ? bind.mainGetOptionSync(key: kOptionApproveMode) == 'click' &&
+          _clients.any((client) => !client.authorized && !client.disconnected)
+      : !hideCm;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
@@ -170,7 +175,11 @@ class ServerModel with ChangeNotifier {
             }
           } else {
             _zeroClientLengthCounter = 0;
-            if (!hideCm) showCmWindow();
+            if (_showCmForClients) {
+              showCmWindow();
+            } else if (_miuQuietHost) {
+              hideCmWindow();
+            }
           }
         }
       }
@@ -510,9 +519,9 @@ class ServerModel with ChangeNotifier {
       }
     }
     if (desktopType == DesktopType.cm) {
-      if (_clients.isEmpty) {
+      if (_clients.isEmpty || (_miuQuietHost && !_showCmForClients)) {
         hideCmWindow();
-      } else if (!hideCm) {
+      } else if (_showCmForClients) {
         showCmWindow();
       }
     }
@@ -556,8 +565,12 @@ class ServerModel with ChangeNotifier {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
       }
-      if (desktopType == DesktopType.cm && !hideCm) {
-        showCmWindow();
+      if (desktopType == DesktopType.cm) {
+        if (_showCmForClients) {
+          showCmWindow();
+        } else if (_miuQuietHost) {
+          hideCmWindow();
+        }
       }
       scrollToBottom();
       notifyListeners();
@@ -576,10 +589,10 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) windowOnTop(null);
+      if (_showCmForClients) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
-    if (client.authorized && isDesktop) {
+    if (client.authorized && isDesktop && !_miuQuietHost) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
@@ -682,6 +695,9 @@ class ServerModel with ChangeNotifier {
       }
       parent.target?.invokeMethod("cancel_notification", client.id);
       client.authorized = true;
+      if (_miuQuietHost && desktopType == DesktopType.cm && !_showCmForClients) {
+        hideCmWindow();
+      }
       notifyListeners();
     } else {
       bind.cmLoginRes(connId: client.id, res: res);
@@ -710,7 +726,8 @@ class ServerModel with ChangeNotifier {
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
-      if (desktopType == DesktopType.cm && _clients.isEmpty) {
+      if (desktopType == DesktopType.cm &&
+          (_clients.isEmpty || (_miuQuietHost && !_showCmForClients))) {
         hideCmWindow();
       }
       if (isAndroid) androidUpdatekeepScreenOn();

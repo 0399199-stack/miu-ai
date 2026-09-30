@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
@@ -801,6 +802,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   Widget _buildToolbar(
       BuildContext context, _ToolbarEdge edge, bool isHorizontal) {
+    final viewOnly = Provider.of<FfiModel>(context).viewOnly;
     final List<Widget> toolbarItems = [];
     toolbarItems.add(_PinMenu(state: widget.state));
     toolbarItems.add(Obx(() {
@@ -814,7 +816,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         return const Offstage();
       }
     }));
-    if (!isWebDesktop) {
+    if (!isWebDesktop && !viewOnly) {
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
@@ -833,8 +835,14 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       }
     }));
 
-    toolbarItems
-        .add(_ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
+    if (!viewOnly) {
+      toolbarItems.add(
+          _ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
+    }
+    if (widget.ffi.connType == ConnType.defaultConn) {
+      toolbarItems.add(_ViewOnlyButton(id: widget.id, ffi: widget.ffi));
+      if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
+    }
     toolbarItems.add(_DisplayMenu(
       id: widget.id,
       ffi: widget.ffi,
@@ -842,11 +850,13 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       setFullscreen: _setFullscreen,
     ));
     // Do not show keyboard for camera connection type.
-    if (widget.ffi.connType == ConnType.defaultConn) {
+    if (widget.ffi.connType == ConnType.defaultConn && !viewOnly) {
       toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     }
-    toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
-    if (!isWeb) {
+    if (!viewOnly) {
+      toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+    }
+    if (!isWeb && !viewOnly) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
@@ -1736,25 +1746,28 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         scrollStyle(state, colorScheme),
         imageQuality(),
         codec(),
-        if (ffi.connType == ConnType.defaultConn)
+        if (!ffiModel.viewOnly && ffi.connType == ConnType.defaultConn)
           _ResolutionsMenu(
             id: widget.id,
             ffi: widget.ffi,
             screenAdjustor: _screenAdjustor,
           ),
-        if (showVirtualDisplayMenu(ffi) && ffi.connType == ConnType.defaultConn)
+        if (!ffiModel.viewOnly &&
+            showVirtualDisplayMenu(ffi) &&
+            ffi.connType == ConnType.defaultConn)
           _SubmenuButton(
             ffi: widget.ffi,
             menuChildren: getVirtualDisplayMenuChildren(ffi, id, null),
             child: Text(translate("Virtual display")),
           ),
         if (ffi.connType == ConnType.defaultConn) cursorToggles(),
-        Divider(),
-        toggles(),
+        if (!ffiModel.viewOnly) Divider(),
+        if (!ffiModel.viewOnly) toggles(),
       ];
       // privacy mode
       final privacyModeState = PrivacyModeState.find(id);
-      if (ffi.connType == ConnType.defaultConn &&
+      if (!ffiModel.viewOnly &&
+          ffi.connType == ConnType.defaultConn &&
           (pi.features.privacyMode || privacyModeState.isNotEmpty) &&
           (ffiModel.keyboard || privacyModeState.isNotEmpty)) {
         final privacyModeList =
@@ -2516,6 +2529,146 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   }
 }
 
+Future<void> setRemoteViewOnly(FFI ffi, String id, bool value) async {
+  if (value && ffi.inputModel.relativeMouseMode.value) {
+    ffi.inputModel.exitRelativeMouseModeWithKeyRelease();
+  }
+  if (bind.sessionGetToggleOptionSync(
+          sessionId: ffi.sessionId, arg: kOptionToggleViewOnly) !=
+      value) {
+    await bind.sessionToggleOption(
+        sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
+  }
+  final viewOnly = await bind.sessionGetToggleOption(
+      sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
+  ffi.ffiModel.setViewOnly(id, viewOnly ?? value);
+  final showMyCursor = await bind.sessionGetToggleOption(
+      sessionId: ffi.sessionId, arg: kOptionToggleShowMyCursor);
+  ffi.ffiModel.setShowMyCursor(showMyCursor ?? value);
+}
+
+class _ViewOnlyButton extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+
+  const _ViewOnlyButton({required this.id, required this.ffi});
+
+  @override
+  Widget build(BuildContext context) {
+    final model = Provider.of<FfiModel>(context);
+    final active = model.viewOnly;
+    final enabled = versionCmp(model.pi.version, '1.2.0') >= 0 &&
+        (active || model.keyboard);
+    final color = active ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor;
+    return Semantics(
+      toggled: active,
+      child: _IconMenuButton(
+        icon: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.visibility_outlined, size: 18, color: Colors.white),
+            SizedBox(width: 4),
+            Text(translate(active ? 'Browsing' : 'View only'),
+                style: TextStyle(fontSize: 12, color: Colors.white)),
+          ],
+        ),
+        width: 92,
+        tooltip: translate(active ? 'Return to control' : 'View only'),
+        onPressed: enabled ? () => setRemoteViewOnly(ffi, id, !active) : null,
+        color: color,
+        hoverColor: active
+            ? _ToolbarTheme.hoverBlueColor
+            : _ToolbarTheme.hoverInactiveColor,
+      ),
+    );
+  }
+}
+
+class _GlowColorMenu extends StatelessWidget {
+  final FFI ffi;
+
+  const _GlowColorMenu({required this.ffi});
+
+  @override
+  Widget build(BuildContext context) {
+    if (Provider.of<FfiModel>(context).viewOnly) {
+      return const Offstage();
+    }
+    const presets = [
+      ('Miu green', '#00FF64', Color(0xFF00FF64)),
+      ('Mist blue', '#5F8CFF', Color(0xFF5F8CFF)),
+      ('Soft violet', '#A179FF', Color(0xFFA179FF)),
+      ('Blush pink', '#FF78AF', Color(0xFFFF78AF)),
+    ];
+    return _IconSubmenuButton(
+      tooltip: translate('Glow color'),
+      icon: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.palette_outlined, size: 18, color: Colors.white),
+          SizedBox(width: 4),
+          Text(translate('Glow'),
+              style: TextStyle(fontSize: 12, color: Colors.white)),
+        ],
+      ),
+      width: 70,
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+      ffi: ffi,
+      menuChildrenGetter: (_) => [
+        for (final (name, hex, color) in presets)
+          MenuButton(
+            ffi: ffi,
+            onPressed: () => bind.sessionSetMiuOverlayColor(
+                sessionId: ffi.sessionId, color: hex),
+            child: Row(
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 10),
+                Text(translate(name)),
+              ],
+            ),
+          ),
+        MenuButton(
+          ffi: ffi,
+          onPressed: () async {
+            const initial = Color(0xFF5F8CFF);
+            final chosen = await showColorPickerDialog(
+              context,
+              initial,
+              pickersEnabled: {
+                ColorPickerType.accent: false,
+                ColorPickerType.wheel: true,
+              },
+              actionButtons: ColorPickerActionButtons(
+                dialogOkButtonLabel: translate('OK'),
+                dialogCancelButtonLabel: translate('Cancel'),
+              ),
+              showColorCode: true,
+            );
+            if (chosen != initial) {
+              final color = (chosen.value & 0xFFFFFF)
+                  .toRadixString(16)
+                  .padLeft(6, '0')
+                  .toUpperCase();
+              bind.sessionSetMiuOverlayColor(
+                  sessionId: ffi.sessionId, color: '#$color');
+            }
+          },
+          child: Text(translate('Custom color')),
+        ),
+      ],
+    );
+  }
+}
+
 class _KeyboardMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
@@ -2713,14 +2866,7 @@ class _KeyboardMenu extends StatelessWidget {
         onChanged: enabled
             ? (value) async {
                 if (value == null) return;
-                await bind.sessionToggleOption(
-                    sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
-                final viewOnly = await bind.sessionGetToggleOption(
-                    sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
-                ffiModel.setViewOnly(id, viewOnly ?? value);
-                final showMyCursor = await bind.sessionGetToggleOption(
-                    sessionId: ffi.sessionId, arg: kOptionToggleShowMyCursor);
-                ffiModel.setShowMyCursor(showMyCursor ?? value);
+                await setRemoteViewOnly(ffi, id, value);
               }
             : null,
         ffi: ffi,
