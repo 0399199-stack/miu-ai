@@ -50,6 +50,7 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
   bool get _canSendTask =>
       !widget.ffi.closed &&
       widget.ffi.connType == ConnType.defaultConn &&
+      widget.ffi.ffiModel.keyboard &&
       widget.ffi.ffiModel.isPeerWindows;
 
   String _label(_TaskKind kind) {

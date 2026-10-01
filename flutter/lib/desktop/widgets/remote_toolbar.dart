@@ -839,7 +839,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_ViewOnlyButton(id: widget.id, ffi: widget.ffi));
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
-      if (!isWeb && widget.ffi.ffiModel.isPeerWindows) {
+      if (!isWeb && widget.ffi.ffiModel.isPeerWindows &&
+          widget.ffi.ffiModel.keyboard) {
         toolbarItems.add(_MiuTasksMenu(ffi: widget.ffi));
       }
     }
