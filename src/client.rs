@@ -3904,6 +3904,11 @@ impl LoginConfigHandler {
             _ => {}
         }
 
+        #[cfg(windows)]
+        if crate::common::get_app_name() == "MiuAI" {
+            crate::miu_pairing::sign_login(&mut lr, &self.hash.miu_pairing_nonce);
+        }
+
         let mut msg_out = Message::new();
         msg_out.set_login_request(lr);
         msg_out

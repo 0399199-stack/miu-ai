@@ -549,9 +549,20 @@ impl Connection {
         let _raii_control_permissions_id =
             raii::ControlPermissionsID::new(id, &control_permissions);
         let salt = Config::get_effective_permanent_password_salt();
+        #[cfg(windows)]
+        let miu_pairing_nonce = if crate::common::get_app_name() == "MiuAI"
+            && crate::platform::is_installed()
+        {
+            hbb_common::rand::random::<[u8; 32]>().to_vec().into()
+        } else {
+            Default::default()
+        };
+        #[cfg(not(windows))]
+        let miu_pairing_nonce = Default::default();
         let hash = Hash {
             salt,
             challenge: Config::get_auto_password(6),
+            miu_pairing_nonce,
             ..Default::default()
         };
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
@@ -2869,6 +2880,15 @@ impl Connection {
         }
         // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            #[cfg(windows)]
+            if crate::common::get_app_name() == "MiuAI"
+                && crate::platform::is_installed()
+                && !crate::miu_pairing::verify_pinned_login(&lr, &self.hash.miu_pairing_nonce)
+            {
+                self.send_login_error("Controller is not paired with this device")
+                    .await;
+                return false;
+            }
             if !self.check_login_scope(&lr).await {
                 return false;
             }
@@ -3109,6 +3129,12 @@ impl Connection {
                 }
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
+            #[cfg(windows)]
+            if crate::common::get_app_name() == "MiuAI" && crate::platform::is_installed() {
+                self.send_login_error("Switch sides is not available on this device")
+                    .await;
+                return false;
+            }
             #[cfg(feature = "flutter")]
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lr) = _s.lr.clone().take() {

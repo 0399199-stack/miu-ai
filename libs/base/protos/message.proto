@@ -84,6 +84,8 @@ message LoginRequest {
   string my_platform = 13;
   bytes hwid = 14;
   string avatar = 17;
+  bytes miu_controller_public_key = 18;
+  bytes miu_controller_proof = 19;
 }
 
 message Terminal {
@@ -328,6 +330,7 @@ message CursorPosition {
 message Hash {
   string salt = 1;
   string challenge = 2;
+  bytes miu_pairing_nonce = 3;
 }
 
 enum ClipboardFormat {

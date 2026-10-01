@@ -8,7 +8,6 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +21,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import './miu_task_center.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -2680,123 +2680,14 @@ class _GlowColorMenu extends StatelessWidget {
   }
 }
 
-enum _MiuTaskKind { website, program, command }
-
 class _MiuTasksMenu extends StatelessWidget {
   final FFI ffi;
 
   const _MiuTasksMenu({required this.ffi});
 
-  String _title(_MiuTaskKind kind) {
-    switch (kind) {
-      case _MiuTaskKind.website:
-        return translate('Open website');
-      case _MiuTaskKind.program:
-        return translate('Open program');
-      case _MiuTaskKind.command:
-        return translate('Run command');
-    }
-  }
-
-  String _hint(_MiuTaskKind kind) {
-    switch (kind) {
-      case _MiuTaskKind.website:
-        return 'https://example.com';
-      case _MiuTaskKind.program:
-        return 'notepad.exe';
-      case _MiuTaskKind.command:
-        return 'dir C:\\';
-    }
-  }
-
-  Future<void> _promptTask(BuildContext context, _MiuTaskKind kind) async {
-    final controller = TextEditingController();
-    String? error;
-    final value = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFFF8F8FD).withOpacity(0.96),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          title: Text(_title(kind)),
-          content: SizedBox(
-            width: 420,
-            child: TextField(
-              controller: controller,
-              autofocus: true,
-              maxLines: 1,
-              inputFormatters: [LengthLimitingTextInputFormatter(2048)],
-              keyboardType: kind == _MiuTaskKind.website
-                  ? TextInputType.url
-                  : TextInputType.text,
-              decoration: InputDecoration(
-                hintText: _hint(kind),
-                errorText: error,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-              onSubmitted: (_) => _submitTask(
-                  dialogContext, setDialogState, controller.text, kind,
-                  (message) => error = message),
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: Text(translate('Cancel'))),
-            FilledButton(
-                onPressed: () => _submitTask(
-                    dialogContext, setDialogState, controller.text, kind,
-                    (message) => error = message),
-                child: Text(translate('Run'))),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
-    if (value == null || !ffi.ffiModel.keyboard || ffi.ffiModel.viewOnly ||
-        !ffi.ffiModel.isPeerWindows) return;
-    if (kind == _MiuTaskKind.command) {
-      await rustDeskWinManager.newTerminal(ffi.id, initialCommand: value);
-    } else {
-      await _openWindowsRun(value);
-    }
-  }
-
-  void _submitTask(BuildContext dialogContext, StateSetter setDialogState,
-      String rawValue, _MiuTaskKind kind, ValueChanged<String?> setError) {
-    final value = rawValue.trim();
-    String? error;
-    if (value.isEmpty || value.contains('\n') || value.contains('\r')) {
-      error = translate('Enter one line');
-    } else if (kind == _MiuTaskKind.website) {
-      final uri = Uri.tryParse(value);
-      if (uri == null || !['http', 'https'].contains(uri.scheme) ||
-          uri.host.isEmpty) {
-        error = translate('Enter an HTTP(S) address');
-      }
-    }
-    if (error != null) {
-      setDialogState(() => setError(error));
-      return;
-    }
-    Navigator.pop(dialogContext, value);
-  }
-
-  Future<void> _openWindowsRun(String value) async {
-    await bind.sessionInputKey(
-        sessionId: ffi.sessionId, name: 'r', down: false, press: true,
-        alt: false, ctrl: false, shift: false, command: true);
-    await Future.delayed(const Duration(milliseconds: 700));
-    await bind.sessionInputString(sessionId: ffi.sessionId, value: value);
-    await bind.sessionInputKey(
-        sessionId: ffi.sessionId, name: 'VK_ENTER', down: false, press: true,
-        alt: false, ctrl: false, shift: false, command: false);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return _IconSubmenuButton(
+    return _IconMenuButton(
       tooltip: translate('Quick tasks'),
       icon: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -2810,15 +2701,7 @@ class _MiuTasksMenu extends StatelessWidget {
       width: 75,
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
-      ffi: ffi,
-      menuChildrenGetter: (_) => [
-        for (final kind in _MiuTaskKind.values)
-          MenuButton(
-            ffi: ffi,
-            onPressed: () => _promptTask(context, kind),
-            child: Text(_title(kind)),
-          ),
-      ],
+      onPressed: () => showMiuTaskCenter(context, ffi),
     );
   }
 }

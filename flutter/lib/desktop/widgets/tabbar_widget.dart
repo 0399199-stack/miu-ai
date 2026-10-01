@@ -763,7 +763,7 @@ class _DesktopTabState extends State<DesktopTab>
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: const Color(0xFF597BF2).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(18),
                           ),
                           child: Text(translate('Host only'),
                               style: TextStyle(
@@ -826,7 +826,7 @@ class _DesktopTabState extends State<DesktopTab>
     final dark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
         height: 38,
         margin: const EdgeInsets.only(right: 4),
@@ -835,7 +835,7 @@ class _DesktopTabState extends State<DesktopTab>
           color: selected
               ? const Color(0xFF5B7CF2).withOpacity(dark ? 0.2 : 0.1)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
         ),
         alignment: Alignment.center,
         child: Text(label,
@@ -858,7 +858,7 @@ class _DesktopTabState extends State<DesktopTab>
         message: tooltip,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(17),
           hoverColor: close
               ? const Color(0xFFF05D73).withOpacity(0.2)
               : const Color(0xFF6486EE).withOpacity(0.12),

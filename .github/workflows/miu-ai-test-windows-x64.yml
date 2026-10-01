@@ -113,6 +113,12 @@ jobs:
           Move-Item -Path ./rustdesk/rustdesk.exe -Destination ./rustdesk/MiuAI.exe
           if (-not (Test-Path ./rustdesk/MiuAI.exe)) { throw 'Miu AI executable missing' }
 
+      - name: Verify Miu pairing proof
+        shell: pwsh
+        run: |
+          cargo test --release --locked --lib --features flutter,hwcodec,vram miu_pairing::tests
+          if ($LASTEXITCODE -ne 0) { throw 'Miu pairing proof test failed' }
+
       - name: Build Miu overlay into distribution directory
         shell: pwsh
         run: |

@@ -66,7 +66,7 @@ class MiuGlass extends StatelessWidget {
     Key? key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.radius = 20,
+    this.radius = 26,
   }) : super(key: key);
 
   final Widget child;
@@ -79,19 +79,19 @@ class MiuGlass extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
             color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.64),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(
-              color: Colors.white.withOpacity(dark ? 0.13 : 0.85),
+              color: Colors.white.withOpacity(dark ? 0.12 : 0.68),
             ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(dark ? 0.12 : 0.04),
-                blurRadius: 24,
+                blurRadius: 32,
                 offset: const Offset(0, 8),
               ),
             ],

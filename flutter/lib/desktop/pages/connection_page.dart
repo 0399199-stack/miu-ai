@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material show Dialog;
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_glass.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -339,14 +341,14 @@ class _ConnectionPageState extends State<ConnectionPage>
       return Expanded(
         child: InkWell(
           onTap: canConnect ? onTap : null,
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(22),
           child: Container(
             height: 78,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(dark ? 0.07 : 0.48),
               border: Border.all(color: Colors.white.withOpacity(dark ? 0.12 : 0.8)),
-              borderRadius: BorderRadius.circular(17),
+              borderRadius: BorderRadius.circular(22),
             ),
             child: Row(children: [
               Icon(icon, size: 25, color: const Color(0xFF5D7FE4)),
@@ -376,18 +378,18 @@ class _ConnectionPageState extends State<ConnectionPage>
             children: [
               MiuGlass(
                 padding: const EdgeInsets.all(28),
-                radius: 26,
+                radius: 32,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
                       Expanded(child: Text(translate('Connect device'),
                           style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700))),
-                      const Icon(Icons.shield_outlined, size: 18,
-                          color: Color(0xFF667FC8)),
-                      const SizedBox(width: 5),
-                      Text(translate('Secure connection'),
-                          style: Theme.of(context).textTheme.bodySmall),
+                      TextButton.icon(
+                        onPressed: _showMiuControllerKey,
+                        icon: const Icon(Icons.key_rounded, size: 17),
+                        label: const Text('首次配对密钥'),
+                      ),
                     ]),
                     const SizedBox(height: 4),
                     Text(translate('Enter the peer ID and choose an action'),
@@ -407,7 +409,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                             filled: true,
                             fillColor: Colors.white.withOpacity(dark ? 0.05 : 0.48),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(22),
                               borderSide: BorderSide.none,
                             ),
                           ),
@@ -455,7 +457,7 @@ class _ConnectionPageState extends State<ConnectionPage>
               Expanded(
                 child: MiuGlass(
                   padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
-                  radius: 24,
+                  radius: 30,
                   child: AnimatedBuilder(
                     animation: gFFI.recentPeersModel,
                     builder: (context, _) {
@@ -489,6 +491,64 @@ class _ConnectionPageState extends State<ConnectionPage>
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMiuControllerKey() async {
+    var key = await bind.mainGetCommon(key: 'miu-controller-public-key');
+    if (key.isEmpty) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      key = await bind.mainGetCommon(key: 'miu-controller-public-key');
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => material.Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 470),
+          child: MiuGlass(
+            radius: 30,
+            padding: const EdgeInsets.all(26),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('A 机主控密钥',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('在 B 机的首次配对页面粘贴此密钥，并在 B 机设置长期密码。',
+                    style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 20),
+                SelectableText(key.isEmpty ? '密钥准备中，请稍后重新打开' : key,
+                    style: const TextStyle(fontSize: 15, height: 1.5)),
+                const SizedBox(height: 22),
+                Row(children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('关闭'),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: key.isEmpty
+                        ? null
+                        : () async {
+                            await Clipboard.setData(ClipboardData(text: key));
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            showToast('主控密钥已复制');
+                          },
+                    icon: const Icon(Icons.copy_rounded, size: 17),
+                    label: const Text('复制密钥'),
+                  ),
+                ]),
+              ],
+            ),
           ),
         ),
       ),

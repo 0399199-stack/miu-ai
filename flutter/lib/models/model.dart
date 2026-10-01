@@ -1407,6 +1407,7 @@ class FfiModel with ChangeNotifier {
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else if (connType == ConnType.terminal) {
+      parent.target?.onTerminalReady?.call();
       // Call onReady on all registered terminal models
       final models = parent.target?._terminalModels.values ?? [];
       for (final model in models) {
@@ -4054,6 +4055,9 @@ class FFI {
 
   // Terminal model registry for multiple terminals
   final Map<int, TerminalModel> _terminalModels = {};
+  void Function()? onTerminalReady;
+  void Function(Map<String, dynamic>)? onTerminalResponse;
+  void Function(String)? onTaskConnectionError;
 
   // Getter for terminal models
   Map<int, TerminalModel> get terminalModels => _terminalModels;
@@ -4163,6 +4167,10 @@ class FFI {
         viewOnly: viewOnly,
         connToken: connToken,
       );
+      if (addRes.isNotEmpty && onTaskConnectionError != null) {
+        onTaskConnectionError!(addRes);
+        return;
+      }
     } else if (display != null) {
       if (displays == null) {
         debugPrint(
@@ -4263,6 +4271,7 @@ class FFI {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
             closed = true;
+            onTaskConnectionError?.call('Connection closed before task completion');
             debugPrint('Exit session event loop');
             return;
           }
@@ -4274,6 +4283,23 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
           if (event != null) {
+            if (event['name'] == 'msgbox' && onTaskConnectionError != null) {
+              final type = event['type']?.toString() ?? '';
+              if (type == 'error' ||
+                  type == 'input-password' ||
+                  type == 're-input-password' ||
+                  type == 'input-2fa' ||
+                  type.startsWith('terminal-admin-login')) {
+                final detail = event['text']?.toString() ?? '';
+                final title = event['title']?.toString() ?? '';
+                onTaskConnectionError!(detail.isNotEmpty
+                    ? detail
+                    : title.isNotEmpty
+                        ? title
+                        : 'Terminal login requires additional authentication');
+                return;
+              }
+            }
             await cb(event);
           }
         } else if (message is EventToUI_Rgba) {
@@ -4307,7 +4333,12 @@ class FFI {
           onEvent2UIRgba();
         }
       }();
-    });
+    },
+        onError: onTaskConnectionError == null
+            ? null
+            : (Object error) => onTaskConnectionError?.call(error.toString()),
+        onDone: () => onTaskConnectionError
+            ?.call('Connection closed before task completion'));
     // every instance will bind a stream
     this.id = id;
   }
@@ -4428,6 +4459,7 @@ class FFI {
   }
 
   void routeTerminalResponse(Map<String, dynamic> evt) {
+    onTerminalResponse?.call(evt);
     final int terminalId = TerminalModel.getTerminalIdFromEvt(evt);
 
     // Route to specific terminal model if it exists

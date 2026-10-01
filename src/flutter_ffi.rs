@@ -2700,6 +2700,22 @@ pub fn main_get_printer_names() -> SyncReturn<String> {
 }
 
 pub fn main_get_common(key: String) -> String {
+    #[cfg(windows)]
+    if key == "miu-controller-public-key" && get_app_name() == "MiuAI" {
+        return crate::miu_pairing::local_public_key();
+    }
+    #[cfg(windows)]
+    if get_app_name() == "MiuAI"
+        && matches!(
+            key.as_str(),
+            "miu-trusted-controller-pk-service"
+                | "miu-approve-mode-service"
+                | "miu-verification-method-service"
+                | "miu-active-connections"
+        )
+    {
+        return crate::ipc::get_config(&key).ok().flatten().unwrap_or_default();
+    }
     if key == "is-printer-installed" {
         #[cfg(target_os = "windows")]
         {

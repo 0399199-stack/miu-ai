@@ -14,6 +14,8 @@ mod server;
 #[cfg(not(any(target_os = "ios")))]
 pub use self::server::*;
 mod client;
+#[cfg(windows)]
+mod miu_pairing;
 mod lan;
 #[cfg(not(any(target_os = "ios")))]
 mod rendezvous_mediator;

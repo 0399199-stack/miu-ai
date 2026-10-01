@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material show Dialog;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
@@ -50,6 +51,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   bool isCardClosed = false;
   bool _miuHostReady = false;
   int _miuHostSessions = 0;
+  bool _miuPairingChecked = false;
+  bool _miuPairingRefreshing = false;
+  String _miuTrustedControllerKey = '';
 
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
@@ -267,6 +271,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   Widget _buildMiuHost(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final paired = _miuTrustedControllerKey.isNotEmpty;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500),
@@ -274,12 +279,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           padding: const EdgeInsets.all(18),
           child: MiuGlass(
             padding: const EdgeInsets.all(22),
-            radius: 24,
+            radius: 30,
             child: ChangeNotifierProvider.value(
               value: gFFI.serverModel,
               child: Consumer<ServerModel>(builder: (context, model, _) {
                 final ready = _miuHostReady && !svcStopped.value;
-                final status = _miuHostSessions > 0
+                final status = !_miuPairingChecked
+                    ? '正在检查配对状态'
+                    : !paired
+                        ? '等待首次配对'
+                        : _miuHostSessions > 0
                     ? translate('In use ({})')
                         .replaceFirst('{}', '$_miuHostSessions')
                     : ready
@@ -305,14 +314,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
-                          color: (ready ? const Color(0xFF38BA89) : const Color(0xFFE59A4D))
+                          color: (ready && paired ? const Color(0xFF38BA89) : const Color(0xFFE59A4D))
                               .withOpacity(0.12),
                           borderRadius: BorderRadius.circular(24),
                         ),
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           Icon(Icons.circle,
                               size: 9,
-                              color: ready ? const Color(0xFF38BA89) : const Color(0xFFE59A4D)),
+                              color: ready && paired ? const Color(0xFF38BA89) : const Color(0xFFE59A4D)),
                           const SizedBox(width: 8),
                           Text(status, style: const TextStyle(fontWeight: FontWeight.w600)),
                         ]),
@@ -321,7 +330,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     const SizedBox(height: 20),
                     MiuGlass(
                       padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
-                      radius: 18,
+                      radius: 24,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -352,11 +361,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             const Icon(Icons.verified_user_outlined,
                                 size: 16, color: Color(0xFF5387D9)),
                             const SizedBox(width: 6),
-                            Expanded(child: Text(translate('Secure access'))),
+                            Expanded(child: Text(paired ? '已绑定主控设备' : '首次配对后才能连接')),
                             TextButton(
-                              onPressed: () => DesktopTabPage.onAddSetting(
-                                  initialPage: SettingsTabKey.safety),
-                              child: Text(translate('Security settings')),
+                              onPressed: paired
+                                  ? () => DesktopTabPage.onAddSetting(
+                                      initialPage: SettingsTabKey.safety)
+                                  : _showMiuPairingDialog,
+                              child: Text(paired ? translate('Security settings') : '开始配对'),
                             ),
                           ]),
                         ],
@@ -364,14 +375,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     ),
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: () => windowManager.hide(),
+                      onPressed: paired ? () => windowManager.hide() : null,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(44),
                         backgroundColor: const Color(0xFF4D7DF1),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(22)),
                       ),
-                      child: Text(translate('Finish and run in background')),
+                      child: Text(paired ? translate('Finish and run in background') : '请先完成配对'),
                     ),
                     const SizedBox(height: 12),
                     Center(
@@ -386,6 +397,238 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ),
       ),
     );
+  }
+
+  Future<void> _refreshMiuPairing() async {
+    if (!isWindows || appName != 'MiuAI' || !isMiuHostOnly ||
+        _miuPairingRefreshing) return;
+    _miuPairingRefreshing = true;
+    try {
+      if (await bind.mainGetCommon(key: 'miu-active-connections') == '') return;
+      final key = await bind.mainGetCommon(key: 'miu-trusted-controller-pk-service');
+      final approveMode = await bind.mainGetCommon(key: 'miu-approve-mode-service');
+      final verificationMethod =
+          await bind.mainGetCommon(key: 'miu-verification-method-service');
+      final passwordSet =
+          (await bind.mainGetCommon(key: 'permanent-password-set')) == 'true';
+      bool validKey = false;
+      try {
+        validKey = RegExp(r'^[A-Za-z0-9+/]{43}=$').hasMatch(key) &&
+            base64Decode(key).length == 32;
+      } on FormatException {
+        validKey = false;
+      }
+      if (!mounted) return;
+      setState(() {
+        _miuTrustedControllerKey =
+            validKey && passwordSet && approveMode == 'password' &&
+                    verificationMethod == kUsePermanentPassword
+                ? key
+                : '';
+        _miuPairingChecked = true;
+      });
+    } finally {
+      _miuPairingRefreshing = false;
+    }
+  }
+
+  Future<void> _showMiuPairingDialog() async {
+    final initialConnections =
+        await bind.mainGetCommon(key: 'miu-active-connections');
+    if (initialConnections != '0') {
+      showToast('请确认连接服务可用，并断开所有远程会话后再配对');
+      return;
+    }
+    final hasPassword =
+        (await bind.mainGetCommon(key: 'permanent-password-set')) == 'true';
+    if (!mounted) return;
+    final keyController = TextEditingController();
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    String error = '';
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, updateDialog) => material.Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: MiuGlass(
+              radius: 30,
+              padding: const EdgeInsets.all(26),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('首次配对',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text('在 A 机复制主控密钥，粘贴到这里。完成后只有持有对应私钥的 A 机可连接，连接时仍需长期密码。',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 8),
+                    Text('完成配对将允许该 A 机无人逐次确认地远控、传输文件和执行命令。',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: keyController,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: 'A 机主控密钥',
+                        hintText: '粘贴 44 位公钥',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (!hasPassword) ...[
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: '设置长期密码（至少 12 位）',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: confirmController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: '再次输入长期密码',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20)),
+                        ),
+                      ),
+                    ] else
+                      const Text('将沿用此电脑已设置的长期密码。'),
+                    if (error.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(error, style: const TextStyle(color: Colors.redAccent)),
+                    ],
+                    const SizedBox(height: 22),
+                    Row(children: [
+                      TextButton(
+                        onPressed: saving
+                            ? null
+                            : () => Navigator.of(dialogContext).pop(),
+                        child: const Text('取消'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                final key = keyController.text.trim();
+                                bool validKey = false;
+                                try {
+                                  validKey = RegExp(r'^[A-Za-z0-9+/]{43}=$')
+                                          .hasMatch(key) &&
+                                      base64Decode(key).length == 32;
+                                } on FormatException {
+                                  validKey = false;
+                                }
+                                if (!validKey) {
+                                  updateDialog(() => error = '主控密钥格式不正确');
+                                  return;
+                                }
+                                if (!hasPassword &&
+                                    (passwordController.text.length < 12 ||
+                                        passwordController.text !=
+                                            confirmController.text)) {
+                                  updateDialog(() => error = '请输入两次相同的长期密码，至少 12 位');
+                                  return;
+                                }
+                                updateDialog(() {
+                                  saving = true;
+                                  error = '';
+                                });
+                                final connections = await bind.mainGetCommon(
+                                    key: 'miu-active-connections');
+                                if (connections != '0') {
+                                  updateDialog(() {
+                                    saving = false;
+                                    error = '请先断开所有远程会话再保存';
+                                  });
+                                  return;
+                                }
+                                if (!hasPassword) {
+                                  final ok = await bind.mainSetPermanentPasswordWithResult(
+                                      password: passwordController.text);
+                                  if (!ok) {
+                                    updateDialog(() {
+                                      saving = false;
+                                      error = '长期密码保存失败';
+                                    });
+                                    return;
+                                  }
+                                }
+                                await bind.mainSetOption(
+                                    key: kOptionApproveMode, value: 'password');
+                                await bind.mainSetOption(
+                                    key: kOptionVerificationMethod,
+                                    value: kUsePermanentPassword);
+                                await bind.mainSetOption(
+                                    key: kOptionEnableKeyboard, value: 'Y');
+                                await bind.mainSetOption(
+                                    key: kOptionEnableFileTransfer, value: 'Y');
+                                await bind.mainSetOption(
+                                    key: kOptionEnableTerminal, value: 'Y');
+                                await bind.mainSetOption(
+                                    key: 'miu-trusted-controller-pk', value: key);
+                                var stored = '';
+                                var approveMode = '';
+                                var verificationMethod = '';
+                                for (var attempt = 0; attempt < 3; attempt++) {
+                                  stored = await bind.mainGetCommon(
+                                      key: 'miu-trusted-controller-pk-service');
+                                  approveMode = await bind.mainGetCommon(
+                                      key: 'miu-approve-mode-service');
+                                  verificationMethod = await bind.mainGetCommon(
+                                      key: 'miu-verification-method-service');
+                                  if (stored == key &&
+                                      approveMode == 'password' &&
+                                      verificationMethod ==
+                                          kUsePermanentPassword) break;
+                                  await Future.delayed(const Duration(milliseconds: 250));
+                                }
+                                if (stored != key ||
+                                    approveMode != 'password' ||
+                                    verificationMethod !=
+                                        kUsePermanentPassword) {
+                                  updateDialog(() {
+                                    saving = false;
+                                    error = '服务尚未确认配对或长期密码模式，请稍后重试';
+                                  });
+                                  return;
+                                }
+                                await _refreshMiuPairing();
+                                if (dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop();
+                                }
+                              },
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
+                        ),
+                        child: Text(saving ? '保存中…' : '完成配对'),
+                      ),
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    keyController.dispose();
+    passwordController.dispose();
+    confirmController.dispose();
   }
 
   Widget buildPopupMenu(BuildContext context) {
@@ -711,9 +954,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
+    _refreshMiuPairing();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       if (isMiuHostOnly) {
+        if (!_miuPairingChecked) await _refreshMiuPairing();
         try {
           final status = jsonDecode(await bind.mainGetConnectStatus())
               as Map<String, dynamic>;

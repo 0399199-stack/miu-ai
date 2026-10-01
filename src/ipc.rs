@@ -985,7 +985,32 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "trusted-devices" {
                     value = Some(Config::get_trusted_devices_json());
                 } else {
-                    value = None;
+                    #[cfg(windows)]
+                    {
+                        value = if crate::common::get_app_name() == "MiuAI" {
+                            match name.as_str() {
+                                "miu-trusted-controller-pk-service" => Some(Config::get_option(
+                                    keys::OPTION_MIU_TRUSTED_CONTROLLER_PK,
+                                )),
+                                "miu-approve-mode-service" => {
+                                    Some(Config::get_option(keys::OPTION_APPROVE_MODE))
+                                }
+                                "miu-verification-method-service" => {
+                                    Some(Config::get_option(keys::OPTION_VERIFICATION_METHOD))
+                                }
+                                "miu-active-connections" => {
+                                    Some(crate::Connection::alive_conns().len().to_string())
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        value = None;
+                    }
                 }
                 allow_err!(stream.send(&Data::Config((name, value))).await);
             }

@@ -72,6 +72,7 @@ pub const OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER: &str = "allow-always-software-ren
 pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
 pub const OPTION_APPROVE_MODE: &str = "approve-mode";
 pub const OPTION_VERIFICATION_METHOD: &str = "verification-method";
+pub const OPTION_MIU_TRUSTED_CONTROLLER_PK: &str = "miu-trusted-controller-pk";
 pub const OPTION_TEMPORARY_PASSWORD_LENGTH: &str = "temporary-password-length";
 pub const OPTION_CUSTOM_RENDEZVOUS_SERVER: &str = "custom-rendezvous-server";
 pub const OPTION_API_SERVER: &str = "api-server";
