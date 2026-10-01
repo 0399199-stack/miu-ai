@@ -834,15 +834,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       }
     }));
 
-    if (!viewOnly) {
-      toolbarItems.add(
-          _ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
-    }
+    toolbarItems.add(
+        _ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_ViewOnlyButton(id: widget.id, ffi: widget.ffi));
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
-      if (!isWeb && !viewOnly && widget.ffi.ffiModel.isPeerWindows &&
-          widget.ffi.ffiModel.keyboard) {
+      if (!isWeb && widget.ffi.ffiModel.isPeerWindows) {
         toolbarItems.add(_MiuTasksMenu(ffi: widget.ffi));
       }
     }
@@ -1321,7 +1318,14 @@ class _ControlMenu extends StatelessWidget {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         ffi: ffi,
-        menuChildrenGetter: (_) => toolbarControls(context, id, ffi).map((e) {
+        menuChildrenGetter: (_) => (ffi.ffiModel.viewOnly
+                ? [
+                    TTextMenu(
+                        child: Text(translate('Return to control')),
+                        onPressed: () => setRemoteViewOnly(ffi, id, false))
+                  ]
+                : toolbarControls(context, id, ffi))
+            .map((e) {
               if (e.divider) {
                 return Divider();
               } else {
@@ -1743,6 +1747,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         scrollStyle(state, colorScheme),
         imageQuality(),
         codec(),
+        if (ffiModel.viewOnly) qualityMonitorToggle(),
         if (!ffiModel.viewOnly && ffi.connType == ConnType.defaultConn)
           _ResolutionsMenu(
             id: widget.id,
@@ -2022,6 +2027,21 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                       ffi: ffi))
                   .toList());
         });
+  }
+
+  Widget qualityMonitorToggle() {
+    const option = 'show-quality-monitor';
+    return CkbMenuButton(
+      value: bind.sessionGetToggleOptionSync(
+          sessionId: ffi.sessionId, arg: option),
+      onChanged: (value) async {
+        if (value == null) return;
+        await bind.sessionToggleOption(sessionId: ffi.sessionId, value: option);
+        ffi.qualityMonitorModel.checkShowQualityMonitor(ffi.sessionId);
+      },
+      child: Text(translate('Show quality monitor')),
+      ffi: ffi,
+    );
   }
 }
 
@@ -2588,9 +2608,6 @@ class _GlowColorMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (Provider.of<FfiModel>(context).viewOnly) {
-      return const Offstage();
-    }
     const presets = [
       ('Soft indigo', '#8D7CF7', Color(0xFF8D7CF7)),
       ('Mist blue', '#5F8CFF', Color(0xFF5F8CFF)),

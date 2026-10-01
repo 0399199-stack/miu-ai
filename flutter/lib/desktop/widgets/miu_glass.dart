@@ -76,26 +76,51 @@ class MiuGlass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.64),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: Colors.white.withOpacity(dark ? 0.12 : 0.68),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(dark ? 0.12 : 0.04),
-                blurRadius: 32,
-                offset: const Offset(0, 8),
-              ),
-            ],
+    final glass = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(dark ? 0.22 : 0.10),
+            blurRadius: 36,
+            offset: const Offset(0, 12),
           ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: dark
+                    ? [Colors.white.withOpacity(0.14), Colors.white.withOpacity(0.06)]
+                    : [Colors.white.withOpacity(0.78), Colors.white.withOpacity(0.48)],
+              ),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: Colors.white.withOpacity(dark ? 0.20 : 0.86),
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+    final animate = !MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: animate ? 0.0 : 1.0, end: 1.0),
+      duration: animate ? const Duration(milliseconds: 300) : Duration.zero,
+      curve: Curves.easeOutCubic,
+      child: glass,
+      builder: (context, progress, child) => Opacity(
+        opacity: progress,
+        child: Transform.translate(
+          offset: Offset(0, 8 * (1 - progress)),
           child: child,
         ),
       ),

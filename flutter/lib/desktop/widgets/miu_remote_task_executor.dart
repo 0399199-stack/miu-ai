@@ -39,9 +39,8 @@ Future<MiuRemoteTaskResult> executeMiuRemoteTask({
     throw StateError('Remote connection is closed');
   }
   if (controller.connType != ConnType.defaultConn ||
-      controller.ffiModel.viewOnly ||
       !controller.ffiModel.isPeerWindows) {
-    throw StateError('Tasks require an interactive Windows control session');
+    throw StateError('Tasks require a Windows remote desktop session');
   }
   if (value.isEmpty ||
       value.contains('\r') ||

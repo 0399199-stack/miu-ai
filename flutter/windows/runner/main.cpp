@@ -3,6 +3,7 @@
 #include <tchar.h>
 #include <uni_links_desktop/uni_links_desktop_plugin.h>
 #include <windows.h>
+#include <dwmapi.h>
 
 #include <algorithm>
 #include <iostream>
@@ -146,6 +147,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, installParam.size(), installParam.c_str()) == 0) {
     is_install_page = true;
   }
+  const bool is_miu_main_window =
+      app_name == L"MiuAI" && !is_cm_page && !is_install_page &&
+      (command_line_arguments.empty() ||
+       command_line_arguments.front() != "multi_window");
 
   command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
@@ -177,6 +182,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   if (!window.CreateAndShow(window_title, origin, size, !is_cm_page)) {
       return EXIT_FAILURE;
+  }
+  if (is_miu_main_window) {
+    // Windows 11 can round this custom title bar when the main HWND opts in.
+    constexpr DWORD kWindowCornerPreference = 33;
+    constexpr DWORD kRound = 2;
+    DwmSetWindowAttribute(window.GetHandle(), kWindowCornerPreference, &kRound,
+                          sizeof(kRound));
   }
   window.SetQuitOnClose(true);
 

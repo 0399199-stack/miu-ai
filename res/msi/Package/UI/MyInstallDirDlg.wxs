@@ -23,9 +23,9 @@
                 <Control Id="Folder" Type="PathEdit" X="20" Y="80" Width="320" Height="18" Property="WIXUI_INSTALLDIR" Indirect="yes" />
                 <Control Id="ChangeFolder" Type="PushButton" X="20" Y="100" Width="56" Height="17" Text="!(loc.InstallDirDlgChange)" />
 
-                <Control Id="ChkBoxStartMenuShortcuts" Type="CheckBox" X="20" Y="140" Width="290" Height="17" Property="STARTMENUSHORTCUTS" CheckBoxValue="1" Text="!(loc.MyInstallDirDlgStartMenuShortcuts)" />
-                <Control Id="ChkBoxDesktopShortcuts" Type="CheckBox" X="20" Y="160" Width="290" Height="17" Property="DESKTOPSHORTCUTS" CheckBoxValue="1" Text="!(loc.MyInstallDirDlgDesktopShortcuts)" />
-                <Control Id="ChkBoxInstallPrinter" Type="CheckBox" X="20" Y="180" Width="290" Height="17" Property="PRINTER" CheckBoxValue="1" Text="!(loc.MyInstallDirDlgPrinter)" />
+                <Control Id="ChkBoxStartMenuShortcuts" Type="CheckBox" X="20" Y="140" Width="290" Height="17" Property="STARTMENUSHORTCUTS" CheckBoxValue="1" Text="!(loc.MyInstallDirDlgStartMenuShortcuts)" HideCondition="ProductName = &quot;MiuAI&quot;" />
+                <Control Id="ChkBoxDesktopShortcuts" Type="CheckBox" X="20" Y="160" Width="290" Height="17" Property="DESKTOPSHORTCUTS" CheckBoxValue="1" Text="!(loc.MyInstallDirDlgDesktopShortcuts)" HideCondition="ProductName = &quot;MiuAI&quot;" />
+                <Control Id="ChkBoxInstallPrinter" Type="CheckBox" X="20" Y="180" Width="290" Height="17" Property="PRINTER" CheckBoxValue="1" Text="!(loc.MyInstallDirDlgPrinter)" HideCondition="ProductName = &quot;MiuAI&quot;" />
             </Dialog>
         </UI>
     </Fragment>

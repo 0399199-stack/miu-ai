@@ -386,7 +386,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     ),
                     const SizedBox(height: 12),
                     Center(
-                      child: Text(translate('Runs in system tray'),
+                      child: Text('随 Windows 启动 · 可从开始菜单打开设置',
                           style: Theme.of(context).textTheme.bodySmall),
                     ),
                   ],

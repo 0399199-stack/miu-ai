@@ -342,27 +342,25 @@ class _ConnectionPageState extends State<ConnectionPage>
         child: InkWell(
           onTap: canConnect ? onTap : null,
           borderRadius: BorderRadius.circular(22),
-          child: Container(
+          child: SizedBox(
             height: 78,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(dark ? 0.07 : 0.48),
-              border: Border.all(color: Colors.white.withOpacity(dark ? 0.12 : 0.8)),
-              borderRadius: BorderRadius.circular(22),
+            child: MiuGlass(
+              radius: 22,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                Icon(icon, size: 25, color: const Color(0xFF5D7FE4)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                )),
+                const Icon(Icons.chevron_right_rounded, size: 20),
+              ]),
             ),
-            child: Row(children: [
-              Icon(icon, size: 25, color: const Color(0xFF5D7FE4)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              )),
-              const Icon(Icons.chevron_right_rounded, size: 20),
-            ]),
           ),
         ),
       );

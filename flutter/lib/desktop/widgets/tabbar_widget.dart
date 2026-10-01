@@ -718,9 +718,20 @@ class _DesktopTabState extends State<DesktopTab>
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          color: dark
-              ? Colors.white.withOpacity(0.05)
-              : Colors.white.withOpacity(0.22),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: dark
+                  ? [Colors.white.withOpacity(0.13), Colors.white.withOpacity(0.05)]
+                  : [Colors.white.withOpacity(0.72), Colors.white.withOpacity(0.42)],
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.white.withOpacity(dark ? 0.12 : 0.72),
+              ),
+            ),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 18),
           child: Row(
             children: [
@@ -827,7 +838,11 @@ class _DesktopTabState extends State<DesktopTab>
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
-      child: Container(
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         height: 38,
         margin: const EdgeInsets.only(right: 4),
         padding: const EdgeInsets.symmetric(horizontal: 13),

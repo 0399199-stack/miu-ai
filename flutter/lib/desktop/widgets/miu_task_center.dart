@@ -47,10 +47,9 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
   String? _error;
   bool _sending = false;
 
-  bool get _canControl =>
+  bool get _canSendTask =>
       !widget.ffi.closed &&
-      !widget.ffi.ffiModel.viewOnly &&
-      widget.ffi.ffiModel.keyboard &&
+      widget.ffi.connType == ConnType.defaultConn &&
       widget.ffi.ffiModel.isPeerWindows;
 
   String _label(_TaskKind kind) {
@@ -116,8 +115,8 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
     if (_sending) return;
     final value = _input.text.trim();
     final error = _validate(value);
-    if (error != null || !_canControl) {
-      setState(() => _error = error ?? '当前连接不能发送控制操作');
+    if (error != null || !_canSendTask) {
+      setState(() => _error = error ?? '当前连接不能发送任务');
       return;
     }
 

@@ -75,6 +75,7 @@ class DesktopSettingPage extends StatefulWidget {
     if (!bind.isIncomingOnly()) SettingsTabKey.display,
     if (!bind.isDisableAccount()) SettingsTabKey.account,
     if (isWindows &&
+        bind.mainGetAppNameSync() != 'MiuAI' &&
         !bind.isDisableSettings() &&
         bind.mainGetBuildinOption(key: kOptionHideRemotePrinterSetting) != 'Y')
       SettingsTabKey.printer,
@@ -1186,7 +1187,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             _OptionCheckBox(
                 context, 'Enable keyboard/mouse', kOptionEnableKeyboard,
                 enabled: enabled, fakeValue: fakeValue),
-            if (isWindows)
+            if (isWindows && bind.mainGetAppNameSync() != 'MiuAI')
               _OptionCheckBox(
                   context, 'Enable remote printer', kOptionEnableRemotePrinter,
                   enabled: enabled, fakeValue: fakeValue),

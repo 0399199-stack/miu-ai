@@ -194,6 +194,10 @@ fn make_tray() -> hbb_common::ResultType<()> {
         );
 
         if let tao::event::Event::NewEvents(tao::event::StartCause::Init) = event {
+            #[cfg(windows)]
+            if crate::get_app_name() == "MiuAI" && crate::platform::is_installed() {
+                return;
+            }
             // for fixing https://github.com/rustdesk/rustdesk/discussions/10210#discussioncomment-14600745
             // so we start tray, but not to show it
             #[cfg(not(windows))]
