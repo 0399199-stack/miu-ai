@@ -6,6 +6,7 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/models/terminal_mouse_handler.dart';
+import 'package:xterm/xterm.dart';
 import 'terminal_connection_manager.dart';
 
 class TerminalPage extends StatefulWidget {
@@ -203,8 +204,10 @@ class _TerminalPageState extends State<TerminalPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final miu = isWindows && appName == 'MiuAI';
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor:
+          miu ? Colors.black : Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final heightPx = constraints.maxHeight;
@@ -214,7 +217,9 @@ class _TerminalPageState extends State<TerminalPage>
             focusNode: _terminalFocusNode,
             // Note: autofocus is not used here because focus is managed manually
             // via _onTabStateChanged() to handle tab switching properly.
-            backgroundOpacity: 0.7,
+            backgroundOpacity: miu ? 1.0 : 0.7,
+            theme:
+                miu ? TerminalThemes.whiteOnBlack : TerminalThemes.defaultTheme,
             padding: _calculatePadding(heightPx),
             onSecondaryTapDown: (details, offset) async {
               final selection = _terminalModel.terminalController.selection;

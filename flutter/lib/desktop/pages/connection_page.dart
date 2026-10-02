@@ -16,6 +16,7 @@ import 'package:flutter_hbb/models/peer_model.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
+import '../../common/widgets/dialog.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
@@ -475,11 +476,41 @@ class _ConnectionPageState extends State<ConnectionPage>
                                 color: Color(0xFF5D7FE4)),
                             title: Text(peer.getId(), maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
-                            subtitle: Text(peer.id),
-                            trailing: TextButton.icon(
-                              onPressed: () => connect(context, peer.id),
-                              icon: const Icon(Icons.arrow_forward_rounded, size: 17),
-                              label: Text(translate('Connect')),
+                            subtitle: peer.alias.isEmpty ? null : Text(peer.id),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () => connect(context, peer.id),
+                                  icon: const Icon(Icons.arrow_forward_rounded, size: 17),
+                                  label: Text(translate('Connect')),
+                                ),
+                                PopupMenuButton<String>(
+                                  tooltip: translate('More'),
+                                  icon: const Icon(Icons.more_horiz_rounded),
+                                  onSelected: (value) {
+                                    if (value == 'rename') {
+                                      renameDialog(
+                                        oldName: peer.alias,
+                                        onSubmit: (alias) async {
+                                          if (alias == peer.alias) return;
+                                          await bind.mainSetPeerAlias(id: peer.id, alias: alias);
+                                          bind.mainLoadRecentPeers();
+                                        },
+                                      );
+                                    } else if (value == 'delete') {
+                                      deleteConfirmDialog(() async {
+                                        await bind.mainRemovePeer(id: peer.id);
+                                        bind.mainLoadRecentPeers();
+                                      }, '从 A 机删除 ${peer.getId()}？将清除本机保存的密码和偏好，不影响 B 机配对。');
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(value: 'rename', child: Text('设置备注')),
+                                    PopupMenuItem(value: 'delete', child: Text('删除记录')),
+                                  ],
+                                ),
+                              ],
                             ),
                           );
                         },

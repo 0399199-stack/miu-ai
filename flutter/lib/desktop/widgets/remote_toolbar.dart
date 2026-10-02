@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
@@ -26,6 +27,8 @@ import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
 enum _ToolbarEdge { top, right, bottom, left }
+
+bool get _isMiuToolbar => isWindows && appName == 'MiuAI';
 
 _ToolbarEdge _parseToolbarEdge(String? s) {
   switch (s) {
@@ -838,10 +841,18 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         _ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_ViewOnlyButton(id: widget.id, ffi: widget.ffi));
+      if (_isMiuToolbar) {
+        toolbarItems.add(SizedBox(
+            width: isHorizontal ? 10 : 0, height: isHorizontal ? 0 : 10));
+      }
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
       if (!isWeb && widget.ffi.ffiModel.isPeerWindows &&
           widget.ffi.ffiModel.keyboard) {
         toolbarItems.add(_MiuTasksMenu(ffi: widget.ffi));
+      }
+      if (_isMiuToolbar) {
+        toolbarItems.add(SizedBox(
+            width: isHorizontal ? 10 : 0, height: isHorizontal ? 0 : 10));
       }
     }
     toolbarItems.add(_DisplayMenu(
@@ -856,7 +867,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
-    final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
+    final toolbarBorderRadius =
+        BorderRadius.circular(_isMiuToolbar ? 18.0 : 4.0);
     // innerAxis: how the toolbar icons themselves flow.
     // outerAxis: how the toolbar block and the handle stack against each other
     // (perpendicular to the dock edge, so the handle hangs off the interior face).
@@ -865,34 +877,59 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final spacer = isHorizontal
         ? SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
         : SizedBox(height: _ToolbarTheme.buttonHMargin * 2);
-    final toolbarMaterial = Material(
-      elevation: _ToolbarTheme.elevation,
-      shadowColor: MyTheme.color(context).shadow,
-      borderRadius: toolbarBorderRadius,
-      color: Theme.of(context)
-          .menuBarTheme
-          .style
-          ?.backgroundColor
-          ?.resolve(MaterialState.values.toSet()),
-      child: SingleChildScrollView(
-        scrollDirection: innerAxis,
-        child: Theme(
-          data: themeData(),
-          child: _ToolbarTheme.borderWrapper(
-              context,
-              Flex(
-                direction: innerAxis,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  spacer,
-                  ...toolbarItems,
-                  spacer,
-                ],
-              ),
-              toolbarBorderRadius),
-        ),
+    final toolbarItemsRow = Flex(
+      direction: innerAxis,
+      mainAxisSize: MainAxisSize.min,
+      children: [spacer, ...toolbarItems, spacer],
+    );
+    final toolbarContent = SingleChildScrollView(
+      scrollDirection: innerAxis,
+      child: Theme(
+        data: themeData(),
+        child: _isMiuToolbar
+            ? toolbarItemsRow
+            : _ToolbarTheme.borderWrapper(
+                context, toolbarItemsRow, toolbarBorderRadius),
       ),
     );
+    final toolbarMaterial = _isMiuToolbar
+        ? Container(
+            decoration: BoxDecoration(
+              borderRadius: toolbarBorderRadius,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF111B3B).withOpacity(0.18),
+                  blurRadius: 22,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: toolbarBorderRadius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFF).withOpacity(0.78),
+                    borderRadius: toolbarBorderRadius,
+                    border: Border.all(color: Colors.white.withOpacity(0.72)),
+                  ),
+                  child: toolbarContent,
+                ),
+              ),
+            ),
+          )
+        : Material(
+            elevation: _ToolbarTheme.elevation,
+            shadowColor: MyTheme.color(context).shadow,
+            borderRadius: toolbarBorderRadius,
+            color: Theme.of(context)
+                .menuBarTheme
+                .style
+                ?.backgroundColor
+                ?.resolve(MaterialState.values.toSet()),
+            child: toolbarContent,
+          );
     final handle = _buildDraggableCollapse(context, edge, isHorizontal);
     // The handle hangs off the interior face of the toolbar (away from the
     // docked edge), centered along that face by the Flex's default cross-axis
@@ -930,8 +967,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         elevation: MaterialStatePropertyAll(0),
         shape: MaterialStatePropertyAll(BeveledRectangleBorder()),
       ).copyWith(
-              backgroundColor:
-                  Theme.of(context).menuBarTheme.style?.backgroundColor)),
+              backgroundColor: _isMiuToolbar
+                  ? const WidgetStatePropertyAll(Colors.transparent)
+                  : Theme.of(context).menuBarTheme.style?.backgroundColor)),
     );
   }
 }
@@ -2590,7 +2628,7 @@ class _ViewOnlyButton extends StatelessWidget {
                 style: TextStyle(fontSize: 12, color: Colors.white)),
           ],
         ),
-        width: 92,
+        width: _isMiuToolbar ? 104 : 92,
         tooltip: translate(active ? 'Return to control' : 'View only'),
         onPressed: enabled ? () => setRemoteViewOnly(ffi, id, !active) : null,
         color: color,
@@ -2611,10 +2649,10 @@ class _GlowColorMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     const presets = [
       ('Soft indigo', '#8D7CF7', Color(0xFF8D7CF7)),
-      ('Mist blue', '#5F8CFF', Color(0xFF5F8CFF)),
-      ('Soft violet', '#A179FF', Color(0xFFA179FF)),
-      ('Blush pink', '#FF78AF', Color(0xFFFF78AF)),
-      ('Miu green', '#00FF64', Color(0xFF00FF64)),
+      ('Mist blue', '#45B9EB', Color(0xFF45B9EB)),
+      ('Soft violet', '#C45DE2', Color(0xFFC45DE2)),
+      ('Blush pink', '#F57CAC', Color(0xFFF57CAC)),
+      ('Miu green', '#40D9AA', Color(0xFF40D9AA)),
     ];
     return _IconSubmenuButton(
       tooltip: translate('Glow color'),
@@ -2627,7 +2665,7 @@ class _GlowColorMenu extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: Colors.white)),
         ],
       ),
-      width: 70,
+      width: _isMiuToolbar ? 88 : 70,
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
       ffi: ffi,
@@ -2716,7 +2754,7 @@ class _MiuTasksMenu extends StatelessWidget {
               style: const TextStyle(fontSize: 12, color: Colors.white)),
         ],
       ),
-      width: 75,
+      width: _isMiuToolbar ? 88 : 75,
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
       onPressed: () => showMiuTaskCenter(context, ffi),
@@ -3076,6 +3114,9 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
   @override
   Widget build(BuildContext context) {
     assert(widget.assetName != null || widget.icon != null);
+    final miu = _isMiuToolbar;
+    final buttonSize = miu ? 38.0 : _ToolbarTheme.buttonSize;
+    final buttonWidth = widget.width ?? buttonSize;
     final icon = widget.icon ??
         SvgPicture.asset(
           widget.assetName!,
@@ -3084,8 +3125,8 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
           height: _ToolbarTheme.buttonSize,
         );
     var button = SizedBox(
-      width: widget.width ?? _ToolbarTheme.buttonSize,
-      height: _ToolbarTheme.buttonSize,
+      width: buttonWidth,
+      height: buttonSize,
       child: MenuItemButton(
           style: ButtonStyle(
               backgroundColor: MaterialStatePropertyAll(Colors.transparent),
@@ -3101,14 +3142,20 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
                 type: MaterialType.transparency,
                 child: Ink(
                     decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(_ToolbarTheme.iconRadius),
+                      borderRadius: BorderRadius.circular(
+                          miu ? 12 : _ToolbarTheme.iconRadius),
                       color: hover ? widget.hoverColor : widget.color,
                     ),
-                    child: icon)),
+                    child: miu
+                        ? SizedBox(
+                            width: buttonWidth,
+                            height: buttonSize,
+                            child: Center(child: icon),
+                          )
+                        : icon)),
           )),
     ).marginSymmetric(
-        horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
+        horizontal: widget.hMargin ?? (miu ? 3 : _ToolbarTheme.buttonHMargin),
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);
     button = Tooltip(
       message: translate(widget.tooltip),
@@ -3161,6 +3208,9 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
   @override
   Widget build(BuildContext context) {
     assert(widget.svg != null || widget.icon != null);
+    final miu = _isMiuToolbar;
+    final buttonSize = miu ? 38.0 : _ToolbarTheme.buttonSize;
+    final buttonWidth = widget.width ?? buttonSize;
     final icon = widget.icon ??
         SvgPicture.asset(
           widget.svg!,
@@ -3169,8 +3219,8 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
           height: _ToolbarTheme.buttonSize,
         );
     final button = SizedBox(
-        width: widget.width ?? _ToolbarTheme.buttonSize,
-        height: _ToolbarTheme.buttonSize,
+        width: buttonWidth,
+        height: buttonSize,
         child: SubmenuButton(
             menuStyle:
                 widget.menuStyle ?? _ToolbarTheme.defaultMenuStyle(context),
@@ -3184,18 +3234,24 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                     type: MaterialType.transparency,
                     child: Ink(
                         decoration: BoxDecoration(
-                          borderRadius:
-                              BorderRadius.circular(_ToolbarTheme.iconRadius),
+                          borderRadius: BorderRadius.circular(
+                              miu ? 12 : _ToolbarTheme.iconRadius),
                           color: hover ? widget.hoverColor : widget.color,
                         ),
-                        child: icon))),
+                        child: miu
+                            ? SizedBox(
+                                width: buttonWidth,
+                                height: buttonSize,
+                                child: Center(child: icon),
+                              )
+                            : icon))),
             menuChildren: widget
                 .menuChildrenGetter(this)
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
                 .toList()));
     return MenuBar(children: [
       button.marginSymmetric(
-          horizontal: _ToolbarTheme.buttonHMargin,
+          horizontal: miu ? 3 : _ToolbarTheme.buttonHMargin,
           vertical: _ToolbarTheme.buttonVMargin)
     ]);
   }

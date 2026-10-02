@@ -105,16 +105,16 @@ internal sealed class Overlay : Form
         BitmapData pixels = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
         try
         {
-            // A narrow top glow and quieter side/bottom halos fade continuously into the desktop.
-            int radius = (int)Math.Ceiling(86 * dpiScale);
+            // Keep all four edges visible while fading the halos into the desktop.
+            int radius = (int)Math.Ceiling(132 * dpiScale);
             byte[] topAlpha = new byte[radius], sideAlpha = new byte[radius], bottomAlpha = new byte[radius];
             for (int d = 0; d < radius; d++)
             {
                 double logicalDistance = d / dpiScale;
                 double distanceSquared = logicalDistance * logicalDistance;
                 topAlpha[d] = (byte)(brightness * (80 * Math.Exp(-distanceSquared / 50.0) + 50 * Math.Exp(-distanceSquared / 1250.0)));
-                sideAlpha[d] = (byte)(brightness * (18 * Math.Exp(-distanceSquared / 128.0) + 12 * Math.Exp(-distanceSquared / 1058.0)));
-                bottomAlpha[d] = (byte)(brightness * (14 * Math.Exp(-distanceSquared / 128.0) + 8 * Math.Exp(-distanceSquared / 1058.0)));
+                sideAlpha[d] = (byte)(brightness * (34 * Math.Exp(-distanceSquared / 700.0) + 30 * Math.Exp(-distanceSquared / 4800.0)));
+                bottomAlpha[d] = (byte)(brightness * (32 * Math.Exp(-distanceSquared / 700.0) + 27 * Math.Exp(-distanceSquared / 4800.0)));
             }
             unsafe
             {
@@ -232,7 +232,7 @@ internal sealed class OverlayApp : ApplicationContext
         breathTimer.Tick += delegate
         {
             double wave = (1 + Math.Cos(breathClock.Elapsed.TotalSeconds * Math.PI / 3)) / 2;
-            byte alpha = (byte)Math.Round(255 * (0.88 + 0.12 * wave));
+            byte alpha = (byte)Math.Round(255 * (0.72 + 0.28 * wave));
             if (alpha == lastAlpha) return;
             lastAlpha = alpha;
             foreach (Overlay window in windows) window.UpdateLayer(alpha);

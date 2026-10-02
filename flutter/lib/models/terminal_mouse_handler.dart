@@ -27,6 +27,7 @@ class TerminalMouseInteraction extends StatefulWidget {
     this.shortcuts,
     this.onKeyEvent,
     this.backgroundOpacity = 1,
+    this.theme = TerminalThemes.defaultTheme,
     this.padding,
     this.onSecondaryTapDown,
   });
@@ -41,6 +42,7 @@ class TerminalMouseInteraction extends StatefulWidget {
   final Map<ShortcutActivator, Intent>? shortcuts;
   final FocusOnKeyEventCallback? onKeyEvent;
   final double backgroundOpacity;
+  final TerminalTheme theme;
   final EdgeInsets? padding;
   final void Function(TapDownDetails, CellOffset)? onSecondaryTapDown;
 
@@ -284,6 +286,7 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
         textStyle: widget.textStyle,
         deleteDetection: widget.deleteDetection,
         backgroundOpacity: widget.backgroundOpacity,
+        theme: widget.theme,
         padding: widget.padding,
         shortcuts: widget.shortcuts ?? platformTerminalShortcuts(),
         onKeyEvent: widget.onKeyEvent ??
