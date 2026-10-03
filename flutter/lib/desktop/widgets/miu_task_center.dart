@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as material show Dialog;
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
@@ -104,11 +103,11 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
   String _label(_TaskKind kind) {
     switch (kind) {
       case _TaskKind.website:
-        return translate('Open website');
+        return '打开网页';
       case _TaskKind.program:
-        return translate('Open program');
+        return '打开程序';
       case _TaskKind.command:
-        return translate('Run command');
+        return '执行命令';
     }
   }
 
@@ -136,14 +135,14 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
 
   String? _validate(String value) {
     if (value.isEmpty || value.contains('\n') || value.contains('\r')) {
-      return translate('Enter one line');
+      return '请输入单行内容';
     }
     if (_kind == _TaskKind.website) {
       final uri = Uri.tryParse(value);
       if (uri == null ||
           !['http', 'https'].contains(uri.scheme.toLowerCase()) ||
           uri.host.isEmpty) {
-        return translate('Enter an HTTP(S) address');
+        return '请输入 HTTP(S) 地址';
       }
     }
     return null;
@@ -317,7 +316,7 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
                         ),
                       ),
                       IconButton(
-                        tooltip: translate('Close'),
+                        tooltip: '关闭',
                         onPressed: _sending ? null : widget.onClose,
                         icon: const Icon(Icons.close_rounded),
                       ),
@@ -397,7 +396,7 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
                                         strokeWidth: 2))
                                 : const Icon(Icons.arrow_upward_rounded,
                                     size: 18),
-                            label: Text(_sending ? '发送中' : translate('Run')),
+                            label: Text(_sending ? '发送中' : '执行'),
                             style: FilledButton.styleFrom(
                               backgroundColor: accent,
                               padding: const EdgeInsets.symmetric(
