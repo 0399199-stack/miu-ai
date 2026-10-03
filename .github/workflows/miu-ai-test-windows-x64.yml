@@ -79,6 +79,10 @@ jobs:
           cd "$(dirname "$(dirname "$(which flutter)")")"
           git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
 
+      - name: Verify Task Center interaction
+        working-directory: flutter
+        run: flutter test --timeout 60s test/miu_task_center_test.dart
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:

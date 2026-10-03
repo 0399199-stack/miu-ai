@@ -463,6 +463,7 @@ class RemoteToolbar extends StatefulWidget {
 
 class _RemoteToolbarState extends State<RemoteToolbar> {
   late Debouncer<int> _debouncerHide;
+  OverlayEntry? _taskCenter;
   bool _isCursorOverImage = false;
   final _fraction = 0.5.obs;
   final _edge = _ToolbarEdge.top.obs;
@@ -501,6 +502,18 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   FfiModel get ffiModel => widget.ffi.ffiModel;
 
   triggerAutoHide() => _debouncerHide.value = _debouncerHide.value + 1;
+
+  void _showTaskCenter(BuildContext context) {
+    if (_taskCenter != null) return;
+    _taskCenter = showMiuTaskCenter(context, widget.ffi, _closeTaskCenter);
+  }
+
+  void _closeTaskCenter() {
+    final entry = _taskCenter;
+    _taskCenter = null;
+    entry?.remove();
+    entry?.dispose();
+  }
 
   void _minimize() async =>
       await WindowController.fromWindowId(windowId).minimize();
@@ -666,6 +679,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   @override
   void didUpdateWidget(covariant RemoteToolbar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.ffi != widget.ffi) _closeTaskCenter();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _syncDockingOptions(force: false);
     });
@@ -680,6 +694,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   @override
   dispose() {
     ++_dockingOptionSyncSerial;
+    _closeTaskCenter();
     widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
     super.dispose();
   }
@@ -848,7 +863,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
       if (!isWeb && widget.ffi.ffiModel.isPeerWindows &&
           widget.ffi.ffiModel.keyboard) {
-        toolbarItems.add(_MiuTasksMenu(ffi: widget.ffi));
+        toolbarItems.add(
+            _MiuTasksMenu(onPressed: () => _showTaskCenter(context)));
       }
       if (_isMiuToolbar) {
         toolbarItems.add(SizedBox(
@@ -2737,9 +2753,9 @@ class _GlowColorMenu extends StatelessWidget {
 }
 
 class _MiuTasksMenu extends StatelessWidget {
-  final FFI ffi;
+  final VoidCallback onPressed;
 
-  const _MiuTasksMenu({required this.ffi});
+  const _MiuTasksMenu({required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -2757,7 +2773,7 @@ class _MiuTasksMenu extends StatelessWidget {
       width: _isMiuToolbar ? 88 : 75,
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
-      onPressed: () => showMiuTaskCenter(context, ffi),
+      onPressed: onPressed,
     );
   }
 }

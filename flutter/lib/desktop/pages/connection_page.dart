@@ -446,6 +446,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                             showToast(translate('Open quick tasks from the remote toolbar'));
                           }),
                     ]),
+                    const SizedBox(height: 12),
+                    Text('首次配对在 B 机完成；连接后可从远程工具栏打开任务中心。',
+                        style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               ),
@@ -470,13 +473,19 @@ class _ConnectionPageState extends State<ConnectionPage>
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final peer = peers[index];
+                          final details = [
+                            if (peer.alias.isNotEmpty) peer.id,
+                            if (peer.hostname.isNotEmpty) peer.hostname,
+                            if (peer.platform.isNotEmpty) peer.platform,
+                          ].join(' · ');
                           return ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 5),
                             leading: const Icon(Icons.desktop_windows_outlined,
                                 color: Color(0xFF5D7FE4)),
                             title: Text(peer.getId(), maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
-                            subtitle: peer.alias.isEmpty ? null : Text(peer.id),
+                            subtitle: details.isEmpty ? null : Text(details,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -484,6 +493,11 @@ class _ConnectionPageState extends State<ConnectionPage>
                                   onPressed: () => connect(context, peer.id),
                                   icon: const Icon(Icons.arrow_forward_rounded, size: 17),
                                   label: Text(translate('Connect')),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => connect(context, peer.id, viewOnly: true),
+                                  icon: const Icon(Icons.visibility_outlined, size: 17),
+                                  label: Text(translate('View only')),
                                 ),
                                 PopupMenuButton<String>(
                                   tooltip: translate('More'),
