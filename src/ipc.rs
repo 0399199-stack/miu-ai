@@ -408,7 +408,14 @@ pub enum Data {
     #[cfg(windows)]
     ControlledSessionCount(usize),
     #[cfg(windows)]
-    MiuOverlayState { count: usize, color: String, enabled: bool },
+    MiuOverlayState {
+        count: usize,
+        color: String,
+        enabled: bool,
+        intensity: u32,
+        period_ms: u32,
+        effect: String,
+    },
     CmErr(String),
     // CM-side file reading responses (Windows only)
     // These are sent from CM back to Connection when CM handles file reading
@@ -1155,6 +1162,9 @@ async fn handle(data: Data, stream: &mut Connection) {
                         count: crate::Connection::miu_authorized_session_count(),
                         color: crate::Connection::miu_overlay_color(),
                         enabled: crate::Connection::miu_overlay_enabled(),
+                        intensity: crate::Connection::miu_overlay_intensity(),
+                        period_ms: crate::Connection::miu_overlay_period_ms(),
+                        effect: crate::Connection::miu_overlay_effect(),
                     })
                     .await
             );

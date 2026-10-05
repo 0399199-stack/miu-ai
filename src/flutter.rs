@@ -691,6 +691,21 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("permission", &[(name, &value.to_string())], &[]);
     }
 
+    #[cfg(windows)]
+    fn set_miu_overlay_settings(&self, settings: &MiuOverlaySettings) {
+        self.push_event(
+            "miu_overlay_settings",
+            &[
+                ("enabled", &settings.enabled.to_string()),
+                ("color", &settings.color),
+                ("intensity", &settings.intensity.to_string()),
+                ("period_ms", &settings.period_ms.to_string()),
+                ("effect", &settings.effect),
+            ],
+            &[],
+        );
+    }
+
     // unused in flutter
     fn close_success(&self) {}
 

@@ -182,6 +182,12 @@ fn make_tray() -> hbb_common::ResultType<()> {
     #[cfg(windows)]
     let mut miu_overlay_color = "#8D7CF7".to_owned();
     #[cfg(windows)]
+    let mut miu_overlay_intensity = 100;
+    #[cfg(windows)]
+    let mut miu_overlay_period_ms = 3000;
+    #[cfg(windows)]
+    let mut miu_overlay_effect = "breathing".to_owned();
+    #[cfg(windows)]
     let mut overlay_launch_error_reported = false;
     #[cfg(target_os = "macos")]
     {
@@ -282,15 +288,30 @@ fn make_tray() -> hbb_common::ResultType<()> {
         {
             let mut latest_state = None;
             while let Ok(data) = ipc_receiver.try_recv() {
-                if let Data::MiuOverlayState { count, color, enabled } = data {
-                    latest_state = Some((count, color, enabled));
+                if let Data::MiuOverlayState {
+                    count,
+                    color,
+                    enabled,
+                    intensity,
+                    period_ms,
+                    effect,
+                } = data
+                {
+                    latest_state = Some((count, color, enabled, intensity, period_ms, effect));
                 }
             }
-            if let Some((count, color, enabled)) = latest_state {
-                if color != miu_overlay_color {
+            if let Some((count, color, enabled, intensity, period_ms, effect)) = latest_state {
+                if color != miu_overlay_color
+                    || intensity != miu_overlay_intensity
+                    || period_ms != miu_overlay_period_ms
+                    || effect != miu_overlay_effect
+                {
                     stop_miu_overlay(&mut miu_overlay);
                     if miu_overlay.is_none() {
                         miu_overlay_color = color;
+                        miu_overlay_intensity = intensity;
+                        miu_overlay_period_ms = period_ms;
+                        miu_overlay_effect = effect;
                     }
                 }
                 _tray_icon
@@ -325,6 +346,12 @@ fn make_tray() -> hbb_common::ResultType<()> {
                             .arg("--no-tray")
                             .arg("--color")
                             .arg(&miu_overlay_color)
+                            .arg("--brightness")
+                            .arg(miu_overlay_intensity.to_string())
+                            .arg("--period-ms")
+                            .arg(miu_overlay_period_ms.to_string())
+                            .arg("--effect")
+                            .arg(&miu_overlay_effect)
                             .arg("--parent-pid")
                             .arg(std::process::id().to_string())
                             .spawn()
@@ -362,22 +389,31 @@ async fn start_query_overlay_state(sender: std::sync::mpsc::Sender<Data>) {
                             }
                             Ok(None) => break,
 
-                            Ok(Some(Data::MiuOverlayState { count, color, enabled })) => {
-                                sender.send(Data::MiuOverlayState { count, color, enabled }).ok();
+                            Ok(Some(Data::MiuOverlayState { count, color, enabled, intensity, period_ms, effect })) => {
+                                sender.send(Data::MiuOverlayState { count, color, enabled, intensity, period_ms, effect }).ok();
                             }
                             _ => {}
                         }
                     }
 
                     _ = timer.tick() => {
-                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new(), enabled: true }).await.is_err() {
+                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new(), enabled: true, intensity: 100, period_ms: 3000, effect: String::new() }).await.is_err() {
                             break;
                         }
                     }
                 }
             }
         }
-        sender.send(Data::MiuOverlayState { count: 0, color: "#8D7CF7".to_owned(), enabled: true }).ok();
+        sender
+            .send(Data::MiuOverlayState {
+                count: 0,
+                color: "#8D7CF7".to_owned(),
+                enabled: true,
+                intensity: 100,
+                period_ms: 3000,
+                effect: "breathing".to_owned(),
+            })
+            .ok();
         hbb_common::sleep(1.).await;
     }
 }

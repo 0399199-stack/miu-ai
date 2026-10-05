@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
@@ -17,12 +18,14 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 import '../../common.dart';
+import '../../models/chat_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 import './miu_task_center.dart';
+import './miu_pet_chat.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -464,6 +467,7 @@ class RemoteToolbar extends StatefulWidget {
 class _RemoteToolbarState extends State<RemoteToolbar> {
   late Debouncer<int> _debouncerHide;
   OverlayEntry? _taskCenter;
+  OverlayEntry? _chatPanel;
   bool _isCursorOverImage = false;
   final _fraction = 0.5.obs;
   final _edge = _ToolbarEdge.top.obs;
@@ -511,6 +515,18 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   void _closeTaskCenter() {
     final entry = _taskCenter;
     _taskCenter = null;
+    entry?.remove();
+    entry?.dispose();
+  }
+
+  void _showChatPanel(BuildContext context) {
+    if (_chatPanel != null) return;
+    _chatPanel = showMiuChatPanel(context, widget.ffi, _closeChatPanel);
+  }
+
+  void _closeChatPanel() {
+    final entry = _chatPanel;
+    _chatPanel = null;
     entry?.remove();
     entry?.dispose();
   }
@@ -679,7 +695,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   @override
   void didUpdateWidget(covariant RemoteToolbar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.ffi != widget.ffi) _closeTaskCenter();
+    if (oldWidget.ffi != widget.ffi) {
+      _closeTaskCenter();
+      _closeChatPanel();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _syncDockingOptions(force: false);
     });
@@ -695,6 +714,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   dispose() {
     ++_dockingOptionSyncSerial;
     _closeTaskCenter();
+    _closeChatPanel();
     widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
     super.dispose();
   }
@@ -857,10 +877,43 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_ViewOnlyButton(id: widget.id, ffi: widget.ffi));
       if (_isMiuToolbar) {
+        toolbarItems.add(_MiuAudioButton(ffi: widget.ffi));
+      }
+      if (_isMiuToolbar) {
         toolbarItems.add(SizedBox(
             width: isHorizontal ? 10 : 0, height: isHorizontal ? 0 : 10));
       }
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
+      if (_isMiuToolbar) {
+        toolbarItems.add(_IconMenuButton(
+          icon: AnimatedBuilder(
+              animation: widget.ffi.chatModel,
+              builder: (context, _) {
+                final unread = widget.ffi.chatModel.miuUnreadCount(
+                    MessageKey(widget.ffi.id, ChatModel.clientModeID));
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline_rounded,
+                        size: 17, color: Colors.white),
+                    const SizedBox(width: 5),
+                    const Text('消息',
+                        style: TextStyle(fontSize: 12, color: Colors.white)),
+                    if (unread > 0) ...[
+                      const SizedBox(width: 4),
+                      const CircleAvatar(
+                          radius: 3, backgroundColor: Color(0xFFFF748F)),
+                    ],
+                  ],
+                );
+              }),
+          width: 76,
+          tooltip: '与 B 机互发消息和图片',
+          color: _ToolbarTheme.blueColor,
+          hoverColor: _ToolbarTheme.hoverBlueColor,
+          onPressed: () => _showChatPanel(context),
+        ));
+      }
       if (!isWeb && widget.ffi.ffiModel.isPeerWindows &&
           widget.ffi.ffiModel.keyboard) {
         toolbarItems.add(
@@ -2656,54 +2709,264 @@ class _ViewOnlyButton extends StatelessWidget {
   }
 }
 
+class _MiuAudioButton extends StatefulWidget {
+  final FFI ffi;
+
+  const _MiuAudioButton({required this.ffi});
+
+  @override
+  State<_MiuAudioButton> createState() => _MiuAudioButtonState();
+}
+
+class _MiuAudioButtonState extends State<_MiuAudioButton> {
+  static const _option = 'disable-audio';
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = bind.sessionGetToggleOptionSync(
+        sessionId: widget.ffi.sessionId, arg: _option);
+    final allowed = Provider.of<FfiModel>(context).permissions['audio'] != false;
+    return Semantics(
+      label: '远程声音',
+      toggled: !muted,
+      child: _IconMenuButton(
+        icon: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
+                size: 18, color: Colors.white),
+            const SizedBox(width: 4),
+            Text(muted ? '声音关' : '声音开',
+                style: const TextStyle(fontSize: 12, color: Colors.white)),
+          ],
+        ),
+        width: 88,
+        tooltip: allowed
+            ? (muted ? '播放 B 机声音' : '关闭 B 机声音')
+            : 'B 机未授权远程声音',
+        color: muted ? _ToolbarTheme.inactiveColor : _ToolbarTheme.blueColor,
+        hoverColor: muted
+            ? _ToolbarTheme.hoverInactiveColor
+            : _ToolbarTheme.hoverBlueColor,
+        onPressed: allowed
+            ? () async {
+                await bind.sessionToggleOption(
+                    sessionId: widget.ffi.sessionId, value: _option);
+                if (mounted) setState(() {});
+              }
+            : null,
+      ),
+    );
+  }
+}
+
 class _GlowColorMenu extends StatelessWidget {
   final FFI ffi;
 
   const _GlowColorMenu({required this.ffi});
 
+  void _setColor(String color) {
+    ffi.ffiModel.markMiuOverlayPending();
+    bind.sessionSetMiuOverlayColor(sessionId: ffi.sessionId, color: color);
+  }
+
+  Future<void> _showSettings(BuildContext context, FfiModel model) async {
+    final enabled = model.miuOverlayEnabled == true;
+    final color = model.miuOverlayColor;
+    var intensity = model.miuOverlayIntensity;
+    var periodMs = model.miuOverlayPeriodMs;
+    var effect = model.miuOverlayEffect;
+    void send() {
+      model.markMiuOverlayPending();
+      bind.sessionSetMiuOverlaySettings(
+          sessionId: ffi.sessionId,
+          enabled: enabled,
+          color: color,
+          intensity: intensity,
+          periodMs: periodMs,
+          effect: effect,
+        );
+    }
+    const effects = [
+      ('steady', '静态柔光'),
+      ('breathing', '柔和呼吸'),
+      ('blink', '柔和闪烁'),
+      ('marquee', '环绕流光'),
+      ('heartbeat', '心跳双脉冲'),
+    ];
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) => material.Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                width: 450,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFF).withOpacity(0.88),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withOpacity(0.8)),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('屏幕光效',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 6),
+                    Text('仅改变 B 机屏幕上的光效',
+                        style: TextStyle(color: Colors.black.withOpacity(0.55))),
+                    const SizedBox(height: 20),
+                    Text('强度  $intensity%'),
+                    Slider(
+                      value: intensity.toDouble(),
+                      min: 0,
+                      max: 100,
+                      divisions: 100,
+                      onChanged: (v) => update(() => intensity = v.round()),
+                      onChangeEnd: (v) {
+                        intensity = v.round();
+                        send();
+                      },
+                    ),
+                    Text('呼吸／动画频率  每 ${(periodMs / 1000).toStringAsFixed(1)} 秒一轮'),
+                    Slider(
+                      value: periodMs.toDouble(),
+                      min: 1200,
+                      max: 10000,
+                      divisions: 88,
+                      onChanged: (v) => update(() => periodMs = v.round()),
+                      onChangeEnd: (v) {
+                        periodMs = v.round();
+                        send();
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('效果'),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final (value, label) in effects)
+                          ChoiceChip(
+                            label: Text(label),
+                            selected: effect == value,
+                            onSelected: (_) {
+                              update(() => effect = value);
+                              send();
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('完成'),
+                      ),
+                    ),
+                  ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final model = Provider.of<FfiModel>(context);
+    final enabled = model.miuOverlayEnabled;
+    final statusColor = enabled == null
+        ? const Color(0xFFFFC857)
+        : enabled
+            ? const Color(0xFF43DF8A)
+            : const Color(0xFFBEC5D4);
     const presets = [
-      ('Soft indigo', '#8D7CF7', Color(0xFF8D7CF7)),
-      ('Mist blue', '#45B9EB', Color(0xFF45B9EB)),
-      ('Soft violet', '#C45DE2', Color(0xFFC45DE2)),
-      ('Blush pink', '#F57CAC', Color(0xFFF57CAC)),
-      ('Miu green', '#40D9AA', Color(0xFF40D9AA)),
+      ('蓝色', '#317CFF', Color(0xFF317CFF)),
+      ('红色', '#FF4D5B', Color(0xFFFF4D5B)),
+      ('黄色', '#FFCF2E', Color(0xFFFFCF2E)),
+      ('紫色', '#9456FF', Color(0xFF9456FF)),
+      ('绿色', '#24D866', Color(0xFF24D866)),
+      ('白色', '#FFFFFF', Color(0xFFFFFFFF)),
     ];
     return _IconSubmenuButton(
-      tooltip: translate('Glow color'),
+      tooltip: enabled == null
+          ? '光效状态待 B 机确认'
+          : enabled
+              ? '光效已开启 · ${model.miuOverlayIntensity}%'
+              : '光效已关闭',
       icon: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.palette_outlined, size: 18, color: Colors.white),
           SizedBox(width: 4),
-          Text(translate('Glow'),
+          Text('光效',
               style: TextStyle(fontSize: 12, color: Colors.white)),
+          SizedBox(width: 5),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+              boxShadow: enabled == true
+                  ? [BoxShadow(color: statusColor.withOpacity(0.75), blurRadius: 7)]
+                  : null,
+            ),
+          ),
         ],
       ),
-      width: _isMiuToolbar ? 88 : 70,
+      width: _isMiuToolbar ? 96 : 76,
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
       ffi: ffi,
       menuChildrenGetter: (_) => [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 10, color: statusColor),
+              const SizedBox(width: 8),
+              Text(enabled == null ? '等待 B 机回报光效状态' : enabled ? 'B 机光效已开启' : 'B 机光效已关闭'),
+            ],
+          ),
+        ),
         MenuButton(
           ffi: ffi,
-          onPressed: () => bind.sessionSetMiuOverlayEnabled(
-              sessionId: ffi.sessionId, enabled: true),
+          onPressed: enabled == null ? null : () {
+            model.markMiuOverlayPending();
+            bind.sessionSetMiuOverlayEnabled(
+                sessionId: ffi.sessionId, enabled: true);
+          },
           child: Text(translate('Turn on glow')),
         ),
         MenuButton(
           ffi: ffi,
-          onPressed: () => bind.sessionSetMiuOverlayEnabled(
-              sessionId: ffi.sessionId, enabled: false),
+          onPressed: enabled == null ? null : () {
+            model.markMiuOverlayPending();
+            bind.sessionSetMiuOverlayEnabled(
+                sessionId: ffi.sessionId, enabled: false);
+          },
           child: Text(translate('Turn off glow')),
         ),
         const Divider(),
         for (final (name, hex, color) in presets)
           MenuButton(
             ffi: ffi,
-            onPressed: () => bind.sessionSetMiuOverlayColor(
-                sessionId: ffi.sessionId, color: hex),
+            onPressed: enabled == null ? null : () => _setColor(hex),
             child: Row(
               children: [
                 Container(
@@ -2712,6 +2975,7 @@ class _GlowColorMenu extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black.withOpacity(0.12)),
                   ),
                 ),
                 SizedBox(width: 10),
@@ -2721,8 +2985,10 @@ class _GlowColorMenu extends StatelessWidget {
           ),
         MenuButton(
           ffi: ffi,
-          onPressed: () async {
-            const initial = Color(0xFF8D7CF7);
+          onPressed: enabled == null ? null : () async {
+            final initial = Color(int.parse(
+                model.miuOverlayColor.substring(1),
+                radix: 16) | 0xFF000000);
             final chosen = await showColorPickerDialog(
               context,
               initial,
@@ -2741,11 +3007,16 @@ class _GlowColorMenu extends StatelessWidget {
                   .toRadixString(16)
                   .padLeft(6, '0')
                   .toUpperCase();
-              bind.sessionSetMiuOverlayColor(
-                  sessionId: ffi.sessionId, color: '#$color');
+              _setColor('#$color');
             }
           },
           child: Text(translate('Custom color')),
+        ),
+        const Divider(),
+        MenuButton(
+          ffi: ffi,
+          onPressed: enabled == null ? null : () => _showSettings(context, model),
+          child: const Text('强度、频率与效果…'),
         ),
       ],
     );

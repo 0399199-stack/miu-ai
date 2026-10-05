@@ -827,6 +827,15 @@ message MessageQuery {
   int32 switch_display = 1;
 }
 
+message MiuOverlaySettings {
+  bool enabled = 1;
+  string color = 2;
+  uint32 intensity = 3;
+  uint32 period_ms = 4;
+  string effect = 5;
+  bool query = 6;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -872,6 +881,7 @@ message Misc {
     uint64 request_cursor_data = 39;
     string miu_overlay_color = 40;
     bool miu_overlay_enabled = 41;
+    MiuOverlaySettings miu_overlay_settings = 42;
   }
 }
 

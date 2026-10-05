@@ -90,6 +90,13 @@ class ChatModel with ChangeNotifier {
   );
 
   late final Map<MessageKey, MessageBody> _messages = {};
+  final Map<MessageKey, int> _miuUnread = {};
+
+  int miuUnreadCount(MessageKey key) => _miuUnread[key] ?? 0;
+
+  void markMiuRead(MessageKey key) {
+    if (_miuUnread.remove(key) != null) notifyListeners();
+  }
 
   MessageKey _currentKey = MessageKey('', -2); // -2 is invalid value
   late bool _isShowCMSidePage = false;
@@ -351,7 +358,7 @@ class ChatModel with ChangeNotifier {
       return;
     }
     if (text.isEmpty) return;
-    if (desktopType == DesktopType.cm) {
+    if (desktopType == DesktopType.cm && appName != 'MiuAI') {
       await showCmWindow();
     }
     String? peerId;
@@ -374,7 +381,9 @@ class ChatModel with ChangeNotifier {
       showChatIconOverlay();
     }
     // show chat page
-    await showChatPage(messagekey);
+    if (appName != 'MiuAI') {
+      await showChatPage(messagekey);
+    }
     late final ChatUser chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
@@ -382,7 +391,7 @@ class ChatModel with ChangeNotifier {
         id: peerId,
       );
 
-      if (isDesktop) {
+      if (isDesktop && appName != 'MiuAI') {
         if (Get.isRegistered<DesktopTabController>()) {
           DesktopTabController tabController = Get.find<DesktopTabController>();
           var index = tabController.state.value.tabs
@@ -412,14 +421,16 @@ class ChatModel with ChangeNotifier {
         return;
       }
       if (isDesktop) {
-        windowOnTop(null);
-        // disable auto jumpTo other tab when hasFocus, and mark unread message
-        final currentSelectedTab =
-            session.serverModel.tabController.state.value.selectedTabInfo;
-        if (currentSelectedTab.key != id.toString() && inputNode.hasFocus) {
-          client.unreadChatMessageCount.value += 1;
-        } else {
-          parent.target?.serverModel.jumpTo(id);
+        if (appName != 'MiuAI') {
+          windowOnTop(null);
+          // disable auto jumpTo other tab when hasFocus, and mark unread message
+          final currentSelectedTab =
+              session.serverModel.tabController.state.value.selectedTabInfo;
+          if (currentSelectedTab.key != id.toString() && inputNode.hasFocus) {
+            client.unreadChatMessageCount.value += 1;
+          } else {
+            parent.target?.serverModel.jumpTo(id);
+          }
         }
       } else {
         if (HomePage.homeKey.currentState?.isChatPageCurrentTab != true ||
@@ -432,6 +443,9 @@ class ChatModel with ChangeNotifier {
     }
     insertMessage(messagekey,
         ChatMessage(text: text, user: chatUser, createdAt: DateTime.now()));
+    if (appName == 'MiuAI' && isDesktop) {
+      _miuUnread[messagekey] = miuUnreadCount(messagekey) + 1;
+    }
     if (id == clientModeID || _currentKey.peerId.isEmpty) {
       // client or invalid
       _currentKey = messagekey;
@@ -456,6 +470,31 @@ class ChatModel with ChangeNotifier {
 
     notifyListeners();
     inputNode.requestFocus();
+  }
+
+  bool sendMiuMessage(MessageKey key, String text) {
+    final messageText = text.trim();
+    final session = parent.target;
+    if (messageText.isEmpty || session == null || session.closed) return false;
+    if (key.isOut &&
+        (session.id != key.peerId || !session.ffiModel.miuPeerAuthenticated)) {
+      return false;
+    }
+    if (!key.isOut && !session.serverModel.clients.any((client) =>
+        client.id == key.connId && client.authorized && !client.disconnected)) {
+      return false;
+    }
+    insertMessage(
+      key,
+      ChatMessage(text: messageText, user: me, createdAt: DateTime.now()),
+    );
+    if (key.isOut) {
+      bind.sessionSendChat(sessionId: sessionId, text: messageText);
+    } else {
+      bind.cmSendChat(connId: key.connId, msg: messageText);
+    }
+    notifyListeners();
+    return true;
   }
 
   insertMessage(MessageKey key, ChatMessage message) {

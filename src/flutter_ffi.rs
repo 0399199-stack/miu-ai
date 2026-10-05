@@ -599,6 +599,25 @@ pub fn session_set_miu_overlay_enabled(session_id: SessionID, enabled: bool) {
     }
 }
 
+pub fn session_set_miu_overlay_settings(
+    session_id: SessionID,
+    enabled: bool,
+    color: String,
+    intensity: u32,
+    period_ms: u32,
+    effect: String,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_miu_overlay_settings(enabled, color, intensity, period_ms, effect);
+    }
+}
+
+pub fn session_query_miu_overlay_settings(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.query_miu_overlay_settings();
+    }
+}
+
 pub fn session_get_trackpad_speed(session_id: SessionID) -> Option<i32> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_trackpad_speed())

@@ -2974,7 +2974,16 @@ impl LoginConfigHandler {
 
         self.id = id;
         self.conn_type = conn_type;
-        let config = self.load_config();
+        let mut config = self.load_config();
+        if cfg!(target_os = "windows")
+            && conn_type == ConnType::DEFAULT_CONN
+            && crate::common::get_app_name() == "MiuAI"
+        {
+            if !config.disable_audio.v {
+                config.disable_audio.v = true;
+                config.store(&self.id);
+            }
+        }
         self.remember = !config.password.is_empty();
         self.config = config;
 

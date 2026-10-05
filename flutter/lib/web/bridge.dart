@@ -467,6 +467,22 @@ class RustdeskImpl {
     throw UnimplementedError('sessionSetMiuOverlayEnabled');
   }
 
+  Future<void> sessionSetMiuOverlaySettings(
+      {required UuidValue sessionId,
+      required bool enabled,
+      required String color,
+      required int intensity,
+      required int periodMs,
+      required String effect,
+      dynamic hint}) {
+    throw UnimplementedError('sessionSetMiuOverlaySettings');
+  }
+
+  Future<void> sessionQueryMiuOverlaySettings(
+      {required UuidValue sessionId, dynamic hint}) {
+    throw UnimplementedError('sessionQueryMiuOverlaySettings');
+  }
+
   Future<void> sessionLockScreen({required UuidValue sessionId, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', ['lock_screen']));
   }

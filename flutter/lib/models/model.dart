@@ -125,6 +125,12 @@ class FfiModel with ChangeNotifier {
   bool _androidDocumentPickerInterruptedConnection = false;
   bool _viewOnly = false;
   bool _showMyCursor = false;
+  bool miuPeerAuthenticated = false;
+  bool? miuOverlayEnabled;
+  String miuOverlayColor = '#8D7CF7';
+  int miuOverlayIntensity = 100;
+  int miuOverlayPeriodMs = 3000;
+  String miuOverlayEffect = 'breathing';
   WeakReference<FFI> parent;
   late final SessionID sessionId;
 
@@ -246,6 +252,33 @@ class FfiModel with ChangeNotifier {
 
   bool get keyboard => _permissions['keyboard'] != false;
 
+  void markMiuOverlayPending() {
+    miuOverlayEnabled = null;
+    notifyListeners();
+  }
+
+  void updateMiuOverlaySettings(Map<String, dynamic> evt) {
+    final enabled = evt['enabled'];
+    if (enabled != 'true' && enabled != 'false') return;
+    miuOverlayEnabled = enabled == 'true';
+    final color = evt['color']?.toString() ?? '';
+    if (RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(color)) {
+      miuOverlayColor = color.toUpperCase();
+    }
+    final intensity = int.tryParse(evt['intensity']?.toString() ?? '');
+    if (intensity != null && intensity >= 0 && intensity <= 100) {
+      miuOverlayIntensity = intensity;
+    }
+    final period = int.tryParse(evt['period_ms']?.toString() ?? '');
+    if (period != null && period >= 1200 && period <= 10000) {
+      miuOverlayPeriodMs = period;
+    }
+    const effects = {'breathing', 'steady', 'blink', 'marquee', 'heartbeat'};
+    final effect = evt['effect']?.toString() ?? '';
+    if (effects.contains(effect)) miuOverlayEffect = effect;
+    notifyListeners();
+  }
+
   clear() {
     _pi = PeerInfo();
     lastUserDisplay = null;
@@ -253,6 +286,8 @@ class FfiModel with ChangeNotifier {
     _secure = null;
     _direct = null;
     _inputBlocked = false;
+    miuPeerAuthenticated = false;
+    miuOverlayEnabled = null;
     _timer?.cancel();
     _timer = null;
     _androidDocumentPickerActive = false;
@@ -337,7 +372,12 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'set_multiple_windows_session') {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
-        handlePeerInfo(evt, peerId, false);
+        await handlePeerInfo(evt, peerId, false);
+        if (isWindows && appName == 'MiuAI' && !isWeb) {
+          miuPeerAuthenticated = true;
+          notifyListeners();
+          bind.sessionQueryMiuOverlaySettings(sessionId: sessionId);
+        }
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
@@ -346,6 +386,11 @@ class FfiModel with ChangeNotifier {
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
+        if (isWindows && appName == 'MiuAI' && !isWeb) {
+          miuPeerAuthenticated = false;
+          miuOverlayEnabled = null;
+          notifyListeners();
+        }
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
@@ -358,6 +403,8 @@ class FfiModel with ChangeNotifier {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         updatePermission(evt, peerId);
+      } else if (name == 'miu_overlay_settings') {
+        updateMiuOverlaySettings(evt);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? '');

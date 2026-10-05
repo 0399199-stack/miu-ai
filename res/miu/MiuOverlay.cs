@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 internal static class Native
 {
@@ -32,18 +33,22 @@ internal sealed class Overlay : Form
     private readonly Color color;
     private readonly float brightness;
     private readonly bool banner;
+    private readonly bool accent;
+    private readonly Screen screen;
     private IntPtr memoryDc;
     private IntPtr layerBitmap;
     private IntPtr previousBitmap;
 
-    internal Overlay(Screen screen, Color color, float brightness, bool banner)
+    internal Overlay(Screen screen, Color color, float brightness, bool banner, bool accent)
     {
+        this.screen = screen;
         this.color = color;
         this.brightness = brightness;
         this.banner = banner;
+        this.accent = accent;
         StartPosition = FormStartPosition.Manual;
         FormBorderStyle = FormBorderStyle.None;
-        Bounds = screen.Bounds;
+        Bounds = accent ? new Rectangle(screen.Bounds.Left - 160, screen.Bounds.Top - 160, 320, 320) : screen.Bounds;
         TopMost = true;
         ShowInTaskbar = false;
     }
@@ -62,17 +67,43 @@ internal sealed class Overlay : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        using (Bitmap bitmap = RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f)))
+        using (Bitmap bitmap = accent ? RenderAccent(color, brightness) : RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f)))
         {
             IntPtr screenDc = Native.GetDC(IntPtr.Zero);
-            memoryDc = Native.CreateCompatibleDC(screenDc);
-            layerBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
-            previousBitmap = Native.SelectObject(memoryDc, layerBitmap);
-            Native.ReleaseDC(IntPtr.Zero, screenDc);
+            try
+            {
+                memoryDc = Native.CreateCompatibleDC(screenDc);
+                if (memoryDc == IntPtr.Zero) throw new InvalidOperationException("CreateCompatibleDC: " + Marshal.GetLastWin32Error());
+                layerBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
+                previousBitmap = Native.SelectObject(memoryDc, layerBitmap);
+                if (previousBitmap == IntPtr.Zero) throw new InvalidOperationException("SelectObject: " + Marshal.GetLastWin32Error());
+            }
+            catch
+            {
+                if (layerBitmap != IntPtr.Zero) Native.DeleteObject(layerBitmap);
+                if (memoryDc != IntPtr.Zero) Native.DeleteDC(memoryDc);
+                memoryDc = IntPtr.Zero;
+                layerBitmap = IntPtr.Zero;
+                throw;
+            }
+            finally { Native.ReleaseDC(IntPtr.Zero, screenDc); }
         }
         UpdateLayer(255);
         if (!Native.SetWindowDisplayAffinity(Handle, Native.WdaExcludeFromCapture))
             MessageBox.Show("边缘光的截图排除未启用，错误码：" + Marshal.GetLastWin32Error(), "Miu AI");
+    }
+
+    internal void MoveAccent(double phase)
+    {
+        if (!accent) return;
+        Rectangle bounds = screen.Bounds;
+        double edge = phase * 2 * (bounds.Width + bounds.Height);
+        int x, y;
+        if (edge < bounds.Width) { x = bounds.Left + (int)edge; y = bounds.Top; }
+        else if ((edge -= bounds.Width) < bounds.Height) { x = bounds.Right; y = bounds.Top + (int)edge; }
+        else if ((edge -= bounds.Height) < bounds.Width) { x = bounds.Right - (int)edge; y = bounds.Bottom; }
+        else { edge -= bounds.Width; x = bounds.Left; y = bounds.Bottom - (int)edge; }
+        Location = new Point(x - Width / 2, y - Height / 2);
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
@@ -106,15 +137,15 @@ internal sealed class Overlay : Form
         try
         {
             // Keep all four edges visible while fading the halos into the desktop.
-            int radius = (int)Math.Ceiling(132 * dpiScale);
+            int radius = (int)Math.Ceiling(176 * dpiScale);
             byte[] topAlpha = new byte[radius], sideAlpha = new byte[radius], bottomAlpha = new byte[radius];
             for (int d = 0; d < radius; d++)
             {
                 double logicalDistance = d / dpiScale;
                 double distanceSquared = logicalDistance * logicalDistance;
-                topAlpha[d] = (byte)(brightness * (80 * Math.Exp(-distanceSquared / 50.0) + 50 * Math.Exp(-distanceSquared / 1250.0)));
-                sideAlpha[d] = (byte)(brightness * (34 * Math.Exp(-distanceSquared / 700.0) + 30 * Math.Exp(-distanceSquared / 4800.0)));
-                bottomAlpha[d] = (byte)(brightness * (32 * Math.Exp(-distanceSquared / 700.0) + 27 * Math.Exp(-distanceSquared / 4800.0)));
+                topAlpha[d] = (byte)Math.Min(255, brightness * (160 * Math.Exp(-distanceSquared / 80.0) + 100 * Math.Exp(-distanceSquared / 2200.0)));
+                sideAlpha[d] = (byte)Math.Min(255, brightness * (68 * Math.Exp(-distanceSquared / 1100.0) + 60 * Math.Exp(-distanceSquared / 7600.0)));
+                bottomAlpha[d] = (byte)Math.Min(255, brightness * (64 * Math.Exp(-distanceSquared / 1100.0) + 54 * Math.Exp(-distanceSquared / 7600.0)));
             }
             unsafe
             {
@@ -129,8 +160,9 @@ internal sealed class Overlay : Form
                     {
                         int sideDistance = Math.Min(x, width - 1 - x);
                         int side = sideDistance < radius ? sideAlpha[sideDistance] : 0;
-                        byte a = (byte)Math.Min(255, top + side + bottom);
-                        if (a == 0) continue;
+                        int combined = Math.Min(255, top + side + bottom);
+                        if (combined == 0) continue;
+                        byte a = (byte)combined;
                         byte* pixel = row + x * 4;
                         pixel[0] = (byte)(color.B * a / 255);
                         pixel[1] = (byte)(color.G * a / 255);
@@ -176,6 +208,36 @@ internal sealed class Overlay : Form
         return bitmap;
     }
 
+    private static Bitmap RenderAccent(Color color, float brightness)
+    {
+        const int size = 320;
+        Bitmap bitmap = new Bitmap(size, size, PixelFormat.Format32bppPArgb);
+        BitmapData pixels = bitmap.LockBits(new Rectangle(0, 0, size, size), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
+        try
+        {
+            unsafe
+            {
+                byte* origin = (byte*)pixels.Scan0;
+                for (int y = 0; y < size; y++)
+                {
+                    byte* row = origin + y * pixels.Stride;
+                    for (int x = 0; x < size; x++)
+                    {
+                        double distanceSquared = (x - 160) * (x - 160) + (y - 160) * (y - 160);
+                        byte a = (byte)Math.Min(255, brightness * (130 * Math.Exp(-distanceSquared / 1800.0) + 70 * Math.Exp(-distanceSquared / 10000.0)));
+                        byte* pixel = row + x * 4;
+                        pixel[0] = (byte)(color.B * a / 255);
+                        pixel[1] = (byte)(color.G * a / 255);
+                        pixel[2] = (byte)(color.R * a / 255);
+                        pixel[3] = a;
+                    }
+                }
+            }
+        }
+        finally { bitmap.UnlockBits(pixels); }
+        return bitmap;
+    }
+
     internal static void SavePreview(string path, Color color, float brightness)
     {
         string fullPath = Path.GetFullPath(path);
@@ -207,37 +269,53 @@ internal sealed class Overlay : Form
 
 internal sealed class OverlayApp : ApplicationContext
 {
-    private readonly Overlay[] windows;
+    private Overlay[] windows;
+    private Overlay[] accents;
     private readonly NotifyIcon tray;
     private readonly string verifyDirectory;
     private readonly Timer demoTimer;
     private readonly Timer parentTimer;
-    private readonly Timer breathTimer;
+    private readonly Timer animationTimer;
     private readonly Process parentProcess;
+    private readonly Color color;
+    private readonly float brightness;
+    private readonly string effect;
+    private readonly int periodMs;
     private bool exiting;
 
-    internal OverlayApp(Color color, float brightness, string verifyDirectory, int demoSeconds, bool showTray, int parentPid)
+    internal OverlayApp(Color color, float brightness, string effect, int periodMs, string verifyDirectory, int demoSeconds, bool showTray, int parentPid)
     {
+        this.color = color;
+        this.brightness = brightness;
+        this.effect = effect;
+        this.periodMs = periodMs;
         this.verifyDirectory = verifyDirectory;
-        Screen[] screens = Screen.AllScreens;
-        windows = new Overlay[screens.Length];
-        for (int i = 0; i < screens.Length; i++)
-        {
-            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary);
-            windows[i].Show();
-        }
-        Stopwatch breathClock = Stopwatch.StartNew();
+        RebuildWindows();
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        Stopwatch animationClock = Stopwatch.StartNew();
         byte lastAlpha = 255;
-        breathTimer = new Timer { Interval = 80 };
-        breathTimer.Tick += delegate
+        animationTimer = new Timer { Interval = effect == "marquee" ? 100 : 80 };
+        animationTimer.Tick += delegate
         {
-            double wave = (1 + Math.Cos(breathClock.Elapsed.TotalSeconds * Math.PI / 3)) / 2;
-            byte alpha = (byte)Math.Round(255 * (0.72 + 0.28 * wave));
+            double phase = (animationClock.Elapsed.TotalMilliseconds % periodMs) / periodMs;
+            if (effect == "marquee")
+            {
+                foreach (Overlay accent in accents) accent.MoveAccent(phase);
+                return;
+            }
+            double wave = (1 + Math.Cos(phase * 2 * Math.PI)) / 2;
+            double strength = effect == "steady" ? 1
+                : effect == "blink" ? 0.42 + 0.58 * wave * wave
+                : effect == "heartbeat" ? 0.48 + 0.52 * Math.Min(1,
+                    Math.Exp(-Math.Pow((phase - 0.18) / 0.055, 2)) +
+                    0.72 * Math.Exp(-Math.Pow((phase - 0.34) / 0.07, 2)))
+                : 0.48 + 0.52 * wave;
+            byte alpha = (byte)Math.Round(255 * strength);
             if (alpha == lastAlpha) return;
             lastAlpha = alpha;
             foreach (Overlay window in windows) window.UpdateLayer(alpha);
         };
-        breathTimer.Start();
+        animationTimer.Start();
         if (showTray)
             tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "Miu AI", Visible = true };
         if (parentPid > 0)
@@ -262,16 +340,45 @@ internal sealed class OverlayApp : ApplicationContext
         }
     }
 
+    private void RebuildWindows()
+    {
+        if (windows != null)
+            foreach (Overlay window in windows) window.Close();
+        if (accents != null)
+            foreach (Overlay accent in accents) accent.Close();
+        Screen[] screens = Screen.AllScreens;
+        windows = new Overlay[screens.Length];
+        accents = effect == "marquee" ? new Overlay[screens.Length] : new Overlay[0];
+        for (int i = 0; i < screens.Length; i++)
+        {
+            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary, false);
+            windows[i].Show();
+            if (effect == "marquee")
+            {
+                accents[i] = new Overlay(screens[i], color, brightness, false, true);
+                accents[i].Show();
+            }
+        }
+    }
+
+    private void OnDisplaySettingsChanged(object sender, EventArgs e)
+    {
+        if (exiting || windows.Length == 0) return;
+        windows[0].BeginInvoke(new Action(RebuildWindows));
+    }
+
     private void Exit()
     {
         if (exiting) return;
         exiting = true;
-        breathTimer.Dispose();
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        animationTimer.Dispose();
         if (demoTimer != null) demoTimer.Dispose();
         if (parentTimer != null) parentTimer.Dispose();
         if (parentProcess != null) parentProcess.Dispose();
         if (tray != null) { tray.Visible = false; tray.Dispose(); }
         foreach (Overlay window in windows) window.Close();
+        foreach (Overlay accent in accents) accent.Close();
         ExitThread();
     }
 
@@ -291,12 +398,15 @@ internal sealed class OverlayApp : ApplicationContext
         {
             Screen primary = Screen.PrimaryScreen;
             foreach (Overlay window in windows) Native.SetWindowDisplayAffinity(window.Handle, 0);
+            foreach (Overlay accent in accents) Native.SetWindowDisplayAffinity(accent.Handle, 0);
             System.Threading.Thread.Sleep(200);
             using (Bitmap included = Capture(primary))
             {
                 bool affinity = true;
                 foreach (Overlay window in windows)
                     affinity &= Native.SetWindowDisplayAffinity(window.Handle, Native.WdaExcludeFromCapture);
+                foreach (Overlay accent in accents)
+                    affinity &= Native.SetWindowDisplayAffinity(accent.Handle, Native.WdaExcludeFromCapture);
                 System.Threading.Thread.Sleep(200);
                 using (Bitmap excluded = Capture(primary))
                 {
@@ -345,6 +455,8 @@ internal static class Program
         Native.SetProcessDpiAwarenessContext(new IntPtr(-4)); // Per-monitor V2, before WinForms queries screens.
         Color color = Color.FromArgb(141, 124, 247);
         float brightness = 1f;
+        string effect = "breathing";
+        int periodMs = 3000;
         string verify = null;
         string preview = null;
         int demoSeconds = 0;
@@ -359,6 +471,17 @@ internal static class Program
                 if (percent < 0 || percent > 100) throw new ArgumentOutOfRangeException("brightness");
                 brightness = percent / 100f;
             }
+            else if (args[i] == "--period-ms" && ++i < args.Length)
+            {
+                periodMs = int.Parse(args[i]);
+                if (periodMs < 1200 || periodMs > 10000) throw new ArgumentOutOfRangeException("period-ms");
+            }
+            else if (args[i] == "--effect" && ++i < args.Length)
+            {
+                effect = args[i];
+                if (effect != "breathing" && effect != "steady" && effect != "blink" && effect != "marquee" && effect != "heartbeat")
+                    throw new ArgumentException("effect");
+            }
             else if (args[i] == "--verify" && ++i < args.Length) verify = Path.GetFullPath(args[i]);
             else if (args[i] == "--preview" && ++i < args.Length) preview = Path.GetFullPath(args[i]);
             else if (args[i] == "--demo-seconds" && ++i < args.Length)
@@ -368,7 +491,7 @@ internal static class Program
             }
             else if (args[i] == "--no-tray") noTray = true;
             else if (args[i] == "--parent-pid" && ++i < args.Length) parentPid = int.Parse(args[i]);
-            else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--brightness 0..100] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--parent-pid N]");
+            else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--brightness 0..100] [--effect breathing|steady|blink|marquee|heartbeat] [--period-ms 1200..10000] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--parent-pid N]");
         }
         if (preview != null) { Overlay.SavePreview(preview, color, brightness); return; }
         // Live overlays must belong to the tray; an accidental manual launch cannot outlive a session.
@@ -378,7 +501,7 @@ internal static class Program
         using (var mutex = new System.Threading.Mutex(true, @"Local\MiuAIOverlay", out created))
         {
             if (!created) return;
-            try { Application.Run(new OverlayApp(color, brightness, verify, demoSeconds, !noTray, parentPid)); }
+            try { Application.Run(new OverlayApp(color, brightness, effect, periodMs, verify, demoSeconds, !noTray, parentPid)); }
             finally { mutex.ReleaseMutex(); }
         }
     }

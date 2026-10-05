@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/desktop/widgets/miu_pet_chat.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
@@ -17,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
+import '../../main.dart' show resizeMiuPetWindow;
 import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
@@ -93,6 +95,15 @@ class _DesktopServerPageState extends State<DesktopServerPage>
       ],
       child: Consumer<ServerModel>(
         builder: (context, serverModel, child) {
+          final petClient = serverModel.miuPetClient;
+          if (isWindows && appName == 'MiuAI' && petClient != null) {
+            return MiuPetHost(
+              key: ValueKey('${petClient.peerId}:${petClient.id}'),
+              chatModel: gFFI.chatModel,
+              keyForPeer: MessageKey(petClient.peerId, petClient.id),
+              onExpanded: resizeMiuPetWindow,
+            );
+          }
           final body = Scaffold(
             backgroundColor: Theme.of(context).colorScheme.background,
             body: ConnectionManager(),

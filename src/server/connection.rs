@@ -97,9 +97,23 @@ const MAX_UNAUTHORIZED_CONNS_PER_ADDR: usize = 16;
 const DEFAULT_MIU_OVERLAY_COLOR: &str = "#8D7CF7";
 
 #[cfg(windows)]
+const DEFAULT_MIU_OVERLAY_PERIOD_MS: u32 = 3000;
+
+#[cfg(windows)]
 fn valid_miu_overlay_color(color: &str) -> bool {
     let bytes = color.as_bytes();
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
+}
+
+#[cfg(windows)]
+fn valid_miu_overlay_settings(settings: &MiuOverlaySettings) -> bool {
+    valid_miu_overlay_color(&settings.color)
+        && settings.intensity <= 100
+        && (1200..=10000).contains(&settings.period_ms)
+        && matches!(
+            settings.effect.as_str(),
+            "breathing" | "steady" | "blink" | "marquee" | "heartbeat"
+        )
 }
 
 /// The largest message a connection may send before it authorizes. Until then a peer sends only
@@ -3899,21 +3913,56 @@ impl Connection {
                     #[cfg(windows)]
                     Some(misc::Union::MiuOverlayColor(color)) => {
                         if self.authorized
-                            && self.authed_conn_type() == Some(AuthConnType::Remote)
+                            && matches!(
+                                self.authed_conn_type(),
+                                Some(AuthConnType::Remote)
+                            )
                             && valid_miu_overlay_color(&color)
                         {
                             Config::set_option("miu-overlay-color".to_owned(), color);
+                            self.send_miu_overlay_status().await;
                         }
                     }
                     #[cfg(windows)]
                     Some(misc::Union::MiuOverlayEnabled(enabled)) => {
                         if self.authorized
-                            && self.authed_conn_type() == Some(AuthConnType::Remote)
+                            && matches!(
+                                self.authed_conn_type(),
+                                Some(AuthConnType::Remote)
+                            )
                         {
                             Config::set_option(
                                 "miu-overlay-enabled".to_owned(),
                                 if enabled { "Y" } else { "N" }.to_owned(),
                             );
+                            self.send_miu_overlay_status().await;
+                        }
+                    }
+                    #[cfg(windows)]
+                    Some(misc::Union::MiuOverlaySettings(settings)) => {
+                        if self.authorized
+                            && matches!(
+                                self.authed_conn_type(),
+                                Some(AuthConnType::Remote)
+                            )
+                        {
+                            if !settings.query && valid_miu_overlay_settings(&settings) {
+                                Config::set_option(
+                                    "miu-overlay-enabled".to_owned(),
+                                    if settings.enabled { "Y" } else { "N" }.to_owned(),
+                                );
+                                Config::set_option("miu-overlay-color".to_owned(), settings.color);
+                                Config::set_option(
+                                    "miu-overlay-intensity".to_owned(),
+                                    settings.intensity.to_string(),
+                                );
+                                Config::set_option(
+                                    "miu-overlay-period-ms".to_owned(),
+                                    settings.period_ms.to_string(),
+                                );
+                                Config::set_option("miu-overlay-effect".to_owned(), settings.effect);
+                            }
+                            self.send_miu_overlay_status().await;
                         }
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
@@ -5654,6 +5703,53 @@ impl Connection {
     }
 
     #[cfg(windows)]
+    pub fn miu_overlay_intensity() -> u32 {
+        Config::get_option("miu-overlay-intensity")
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value <= 100)
+            .unwrap_or(100)
+    }
+
+    #[cfg(windows)]
+    pub fn miu_overlay_period_ms() -> u32 {
+        Config::get_option("miu-overlay-period-ms")
+            .parse::<u32>()
+            .ok()
+            .filter(|value| (1200..=10000).contains(value))
+            .unwrap_or(DEFAULT_MIU_OVERLAY_PERIOD_MS)
+    }
+
+    #[cfg(windows)]
+    pub fn miu_overlay_effect() -> String {
+        let effect = Config::get_option("miu-overlay-effect");
+        if matches!(
+            effect.as_str(),
+            "breathing" | "steady" | "blink" | "marquee" | "heartbeat"
+        ) {
+            effect
+        } else {
+            "breathing".to_owned()
+        }
+    }
+
+    #[cfg(windows)]
+    async fn send_miu_overlay_status(&mut self) {
+        let mut misc = Misc::new();
+        misc.set_miu_overlay_settings(MiuOverlaySettings {
+            enabled: Self::miu_overlay_enabled(),
+            color: Self::miu_overlay_color(),
+            intensity: Self::miu_overlay_intensity(),
+            period_ms: Self::miu_overlay_period_ms(),
+            effect: Self::miu_overlay_effect(),
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(msg).await;
+    }
+
+    #[cfg(windows)]
     fn portable_check(&mut self) {
         if self.portable.is_installed || !self.is_remote() || !self.keyboard {
             return;
@@ -6205,6 +6301,7 @@ impl Connection {
             Some(misc::Union::SwitchSidesRequest(_)) => "misc.switch_sides_request",
             Some(misc::Union::MiuOverlayColor(_)) => "misc.miu_overlay_color",
             Some(misc::Union::MiuOverlayEnabled(_)) => "misc.miu_overlay_enabled",
+            Some(misc::Union::MiuOverlaySettings(_)) => "misc.miu_overlay_settings",
             Some(_) => "misc.other",
             None => "misc.empty",
         }
@@ -7727,6 +7824,35 @@ mod test {
         assert_scopes(
             AuthConnType::Remote,
             [(misc_msg(|m| m.set_miu_overlay_enabled(false)), None)],
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn miu_overlay_settings_validate_and_require_remote_scope() {
+        let settings = MiuOverlaySettings {
+            enabled: true,
+            color: "#FFFFFF".to_owned(),
+            intensity: 100,
+            period_ms: 3000,
+            effect: "marquee".to_owned(),
+            ..Default::default()
+        };
+        assert!(valid_miu_overlay_settings(&settings));
+        let mut invalid = settings.clone();
+        invalid.period_ms = 100;
+        assert!(!valid_miu_overlay_settings(&invalid));
+        assert_scopes(
+            AuthConnType::Remote,
+            [(misc_msg(|m| m.set_miu_overlay_settings(settings.clone())), None)],
+        );
+        assert_scopes(
+            AuthConnType::ViewCamera,
+            [(misc_msg(|m| m.set_miu_overlay_settings(settings.clone())), Some("misc.miu_overlay_settings"))],
+        );
+        assert_scopes(
+            AuthConnType::FileTransfer,
+            [(misc_msg(|m| m.set_miu_overlay_settings(settings)), Some("misc.miu_overlay_settings"))],
         );
     }
 

@@ -22,6 +22,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 import 'common.dart';
 import 'consts.dart';
@@ -311,6 +312,34 @@ void runConnectionManagerScreen() async {
 }
 
 bool _isCmReadyToShow = false;
+bool _miuPetWindowVisible = false;
+const _miuPetSmallSize = Size(196, 192);
+const _miuPetChatSize = Size(360, 450);
+
+Future<void> showMiuPetWindow() async {
+  if (!_isCmReadyToShow || _miuPetWindowVisible) return;
+  _miuPetWindowVisible = true;
+  await windowManager.setSize(_miuPetSmallSize);
+  final screens = await window_size.getScreenList();
+  if (screens.isNotEmpty) {
+    final frame = screens.first.visibleFrame;
+    await windowManager.setPosition(Offset(
+        frame.right - _miuPetSmallSize.width - 24,
+        frame.bottom - _miuPetSmallSize.height - 24));
+  }
+  if (!_miuPetWindowVisible) return;
+  await windowManager.setAlwaysOnTop(true);
+  await windowManager.setSkipTaskbar(true);
+  await windowManager.restore();
+  await windowManager.setOpacity(1);
+  if (_miuPetWindowVisible) await windowManager.show();
+}
+
+Future<void> resizeMiuPetWindow(bool expanded) async {
+  if (!_miuPetWindowVisible) return;
+  await windowManager.setSizeAlignment(
+      expanded ? _miuPetChatSize : _miuPetSmallSize, Alignment.bottomRight);
+}
 
 showCmWindow({bool isStartup = false}) async {
   if (isStartup) {
@@ -328,6 +357,15 @@ showCmWindow({bool isStartup = false}) async {
         kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     _isCmReadyToShow = true;
   } else if (_isCmReadyToShow) {
+    if (_miuPetWindowVisible) {
+      _miuPetWindowVisible = false;
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+      await windowManager.setSkipTaskbar(false);
+      await windowManager.setOpacity(1);
+      await windowManager.show();
+      return;
+    }
     if (await windowManager.getOpacity() != 1) {
       await windowManager.setOpacity(1);
       if (isWindows && bind.mainGetAppNameSync() == 'MiuAI') {
@@ -349,6 +387,7 @@ showCmWindow({bool isStartup = false}) async {
 }
 
 hideCmWindow({bool isStartup = false}) async {
+  _miuPetWindowVisible = false;
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat);
@@ -358,6 +397,10 @@ hideCmWindow({bool isStartup = false}) async {
     await windowManager.minimize();
     await windowManager.hide();
     _isCmReadyToShow = true;
+    if (isWindows && appName == 'MiuAI' &&
+        gFFI.serverModel.miuPetClient != null) {
+      await showMiuPetWindow();
+    }
   } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 0) {
       await windowManager.setOpacity(0);

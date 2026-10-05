@@ -37,6 +37,19 @@ class ServerModel with ChangeNotifier {
       ? bind.mainGetOptionSync(key: kOptionApproveMode) == 'click' &&
           _clients.any((client) => !client.authorized && !client.disconnected)
       : !hideCm;
+  Client? get miuPetClient => _miuQuietHost && !_showCmForClients
+      ? _clients.firstWhereOrNull((client) =>
+          client.authorized && !client.disconnected &&
+          !client.isFileTransfer && !client.isViewCamera &&
+          !client.isTerminal && client.portForward.isEmpty)
+      : null;
+  void _showMiuPetOrHide() {
+    if (miuPetClient == null) {
+      hideCmWindow();
+    } else {
+      showMiuPetWindow();
+    }
+  }
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
@@ -178,7 +191,7 @@ class ServerModel with ChangeNotifier {
             if (_showCmForClients) {
               showCmWindow();
             } else if (_miuQuietHost) {
-              hideCmWindow();
+              _showMiuPetOrHide();
             }
           }
         }
@@ -519,8 +532,10 @@ class ServerModel with ChangeNotifier {
       }
     }
     if (desktopType == DesktopType.cm) {
-      if (_clients.isEmpty || (_miuQuietHost && !_showCmForClients)) {
+      if (_clients.isEmpty) {
         hideCmWindow();
+      } else if (_miuQuietHost && !_showCmForClients) {
+        _showMiuPetOrHide();
       } else if (_showCmForClients) {
         showCmWindow();
       }
@@ -569,7 +584,7 @@ class ServerModel with ChangeNotifier {
         if (_showCmForClients) {
           showCmWindow();
         } else if (_miuQuietHost) {
-          hideCmWindow();
+          _showMiuPetOrHide();
         }
       }
       scrollToBottom();
@@ -696,7 +711,7 @@ class ServerModel with ChangeNotifier {
       parent.target?.invokeMethod("cancel_notification", client.id);
       client.authorized = true;
       if (_miuQuietHost && desktopType == DesktopType.cm && !_showCmForClients) {
-        hideCmWindow();
+        _showMiuPetOrHide();
       }
       notifyListeners();
     } else {
@@ -726,9 +741,12 @@ class ServerModel with ChangeNotifier {
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
-      if (desktopType == DesktopType.cm &&
-          (_clients.isEmpty || (_miuQuietHost && !_showCmForClients))) {
-        hideCmWindow();
+      if (desktopType == DesktopType.cm) {
+        if (_clients.isEmpty) {
+          hideCmWindow();
+        } else if (_miuQuietHost && !_showCmForClients) {
+          _showMiuPetOrHide();
+        }
       }
       if (isAndroid) androidUpdatekeepScreenOn();
       notifyListeners();

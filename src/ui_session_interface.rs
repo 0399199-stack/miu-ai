@@ -531,6 +531,39 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    pub fn set_miu_overlay_settings(
+        &self,
+        enabled: bool,
+        color: String,
+        intensity: u32,
+        period_ms: u32,
+        effect: String,
+    ) {
+        let mut misc = Misc::new();
+        misc.set_miu_overlay_settings(MiuOverlaySettings {
+            enabled,
+            color,
+            intensity,
+            period_ms,
+            effect,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
+    pub fn query_miu_overlay_settings(&self) {
+        let mut misc = Misc::new();
+        misc.set_miu_overlay_settings(MiuOverlaySettings {
+            query: true,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
     pub fn get_remember(&self) -> bool {
         self.lc.read().unwrap().remember
     }
@@ -1718,6 +1751,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
+    fn set_miu_overlay_settings(&self, _settings: &MiuOverlaySettings) {}
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
     fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str);

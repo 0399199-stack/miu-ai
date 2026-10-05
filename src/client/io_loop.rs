@@ -2039,6 +2039,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::ChatMessage(c)) => {
                         self.handler.new_message(c.text);
                     }
+                    #[cfg(windows)]
+                    Some(misc::Union::MiuOverlaySettings(settings)) => {
+                        self.handler.set_miu_overlay_settings(&settings);
+                    }
                     Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754
