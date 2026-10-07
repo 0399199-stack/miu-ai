@@ -95,6 +95,8 @@ const MAX_UNAUTHORIZED_CONNS: usize = 64;
 const MAX_UNAUTHORIZED_CONNS_PER_ADDR: usize = 16;
 #[cfg(windows)]
 const DEFAULT_MIU_OVERLAY_COLOR: &str = "#8D7CF7";
+#[cfg(windows)]
+const DEFAULT_MIU_OVERLAY_TEXT: &str = "Miu AI is using your computer";
 
 #[cfg(windows)]
 const DEFAULT_MIU_OVERLAY_PERIOD_MS: u32 = 3000;
@@ -103,6 +105,11 @@ const DEFAULT_MIU_OVERLAY_PERIOD_MS: u32 = 3000;
 fn valid_miu_overlay_color(color: &str) -> bool {
     let bytes = color.as_bytes();
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
+}
+
+#[cfg(windows)]
+fn valid_miu_overlay_text(text: &str) -> bool {
+    !text.trim().is_empty() && text.chars().count() <= 80 && !text.chars().any(char::is_control)
 }
 
 #[cfg(windows)]
@@ -3939,6 +3946,19 @@ impl Connection {
                         }
                     }
                     #[cfg(windows)]
+                    Some(misc::Union::MiuOverlayText(text)) => {
+                        if self.authorized
+                            && matches!(
+                                self.authed_conn_type(),
+                                Some(AuthConnType::Remote)
+                            )
+                            && valid_miu_overlay_text(&text)
+                        {
+                            Config::set_option("miu-overlay-text".to_owned(), text);
+                            self.send_miu_overlay_status().await;
+                        }
+                    }
+                    #[cfg(windows)]
                     Some(misc::Union::MiuOverlaySettings(settings)) => {
                         if self.authorized
                             && matches!(
@@ -5734,6 +5754,16 @@ impl Connection {
     }
 
     #[cfg(windows)]
+    pub fn miu_overlay_text() -> String {
+        let text = Config::get_option("miu-overlay-text");
+        if valid_miu_overlay_text(&text) {
+            text
+        } else {
+            DEFAULT_MIU_OVERLAY_TEXT.to_owned()
+        }
+    }
+
+    #[cfg(windows)]
     async fn send_miu_overlay_status(&mut self) {
         let mut misc = Misc::new();
         misc.set_miu_overlay_settings(MiuOverlaySettings {
@@ -5742,6 +5772,7 @@ impl Connection {
             intensity: Self::miu_overlay_intensity(),
             period_ms: Self::miu_overlay_period_ms(),
             effect: Self::miu_overlay_effect(),
+            text: Self::miu_overlay_text(),
             ..Default::default()
         });
         let mut msg = Message::new();
@@ -6302,6 +6333,7 @@ impl Connection {
             Some(misc::Union::MiuOverlayColor(_)) => "misc.miu_overlay_color",
             Some(misc::Union::MiuOverlayEnabled(_)) => "misc.miu_overlay_enabled",
             Some(misc::Union::MiuOverlaySettings(_)) => "misc.miu_overlay_settings",
+            Some(misc::Union::MiuOverlayText(_)) => "misc.miu_overlay_text",
             Some(_) => "misc.other",
             None => "misc.empty",
         }
@@ -7853,6 +7885,23 @@ mod test {
         assert_scopes(
             AuthConnType::FileTransfer,
             [(misc_msg(|m| m.set_miu_overlay_settings(settings)), Some("misc.miu_overlay_settings"))],
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn miu_overlay_text_requires_remote_scope_and_single_line() {
+        assert!(valid_miu_overlay_text("Miu AI is taking over your computer"));
+        assert!(!valid_miu_overlay_text("  "));
+        assert!(!valid_miu_overlay_text("one\ntwo"));
+        assert!(!valid_miu_overlay_text(&"a".repeat(81)));
+        assert_scopes(
+            AuthConnType::Remote,
+            [(misc_msg(|m| m.set_miu_overlay_text("Hello".into())), None)],
+        );
+        assert_scopes(
+            AuthConnType::FileTransfer,
+            [(misc_msg(|m| m.set_miu_overlay_text("Hello".into())), Some("misc.miu_overlay_text"))],
         );
     }
 

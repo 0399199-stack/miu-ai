@@ -411,6 +411,7 @@ pub enum Data {
     MiuOverlayState {
         count: usize,
         color: String,
+        text: String,
         enabled: bool,
         intensity: u32,
         period_ms: u32,
@@ -1161,6 +1162,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .send(&Data::MiuOverlayState {
                         count: crate::Connection::miu_authorized_session_count(),
                         color: crate::Connection::miu_overlay_color(),
+                        text: crate::Connection::miu_overlay_text(),
                         enabled: crate::Connection::miu_overlay_enabled(),
                         intensity: crate::Connection::miu_overlay_intensity(),
                         period_ms: crate::Connection::miu_overlay_period_ms(),

@@ -71,6 +71,39 @@ const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::Special(RUSTDESK_CLIPBOARD_OWNER_FORMAT),
 ];
 
+#[cfg(target_os = "windows")]
+pub fn miu_read_clipboard_png() -> ResultType<Vec<u8>> {
+    let _lock = ARBOARD_MTX.lock().unwrap();
+    let mut clipboard = arboard::Clipboard::new()?;
+    let data = clipboard.get_image()?;
+    let png = match data {
+        arboard::ImageData::Png(bytes) => bytes.into_owned(),
+        arboard::ImageData::Rgba(rgba) => {
+            let pixels = rgba.width.checked_mul(rgba.height).unwrap_or(usize::MAX);
+            if pixels == 0 || pixels > 20_000_000 || rgba.bytes.len() != pixels * 4 {
+                bail!("Clipboard image is too large or invalid");
+            }
+            let image = image::RgbaImage::from_raw(
+                rgba.width as u32,
+                rgba.height as u32,
+                rgba.bytes.into_owned(),
+            )
+            .ok_or_else(|| hbb_common::anyhow::anyhow!("Invalid clipboard image"))?;
+            let mut output = Vec::new();
+            image::DynamicImage::ImageRgba8(image).write_to(
+                &mut std::io::Cursor::new(&mut output),
+                image::ImageOutputFormat::Png,
+            )?;
+            output
+        }
+        arboard::ImageData::Svg(_) => bail!("Clipboard does not contain a bitmap image"),
+    };
+    if png.is_empty() || png.len() > 25 * 1024 * 1024 {
+        bail!("Clipboard image exceeds 25 MB");
+    }
+    Ok(png)
+}
+
 #[cfg(not(target_os = "android"))]
 pub fn check_clipboard(
     ctx: &mut Option<ClipboardContext>,

@@ -599,6 +599,12 @@ pub fn session_set_miu_overlay_enabled(session_id: SessionID, enabled: bool) {
     }
 }
 
+pub fn session_set_miu_overlay_text(session_id: SessionID, text: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_miu_overlay_text(text);
+    }
+}
+
 pub fn session_set_miu_overlay_settings(
     session_id: SessionID,
     enabled: bool,
@@ -793,6 +799,17 @@ pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
 pub fn session_input_os_password(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.input_os_password(value, true);
+    }
+}
+
+pub fn miu_read_clipboard_png() -> ResultType<Vec<u8>> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::clipboard::miu_read_clipboard_png()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        hbb_common::bail!("Clipboard image paste is available on Windows only")
     }
 }
 
