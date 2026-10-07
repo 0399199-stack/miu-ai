@@ -536,9 +536,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   void _showImagePanel(BuildContext context) {
     if (_imagePanel != null) return;
     _imagePanel = showMiuSendImagePanel(context, widget.ffi, _closeImagePanel,
-        readClipboardPng: () async {
-      final bytes = await (bind as dynamic).miuReadClipboardPng();
-      return Uint8List.fromList(bytes as List<int>);
+        saveClipboardPng: () async {
+      final result = await (bind as dynamic).miuSaveClipboardPng() as String;
+      if (result.startsWith('error:')) {
+        throw FormatException(result.substring(6));
+      }
+      return result;
     });
   }
 
