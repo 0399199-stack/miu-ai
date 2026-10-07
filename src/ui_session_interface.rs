@@ -531,6 +531,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    pub fn set_miu_overlay_text(&self, text: String) {
+        let mut misc = Misc::new();
+        misc.set_miu_overlay_text(text);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
     pub fn set_miu_overlay_settings(
         &self,
         enabled: bool,

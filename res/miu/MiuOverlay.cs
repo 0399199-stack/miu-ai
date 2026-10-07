@@ -33,18 +33,20 @@ internal sealed class Overlay : Form
     private readonly Color color;
     private readonly float brightness;
     private readonly bool banner;
+    private readonly string text;
     private readonly bool accent;
     private readonly Screen screen;
     private IntPtr memoryDc;
     private IntPtr layerBitmap;
     private IntPtr previousBitmap;
 
-    internal Overlay(Screen screen, Color color, float brightness, bool banner, bool accent)
+    internal Overlay(Screen screen, Color color, float brightness, bool banner, bool accent, string text)
     {
         this.screen = screen;
         this.color = color;
         this.brightness = brightness;
         this.banner = banner;
+        this.text = text;
         this.accent = accent;
         StartPosition = FormStartPosition.Manual;
         FormBorderStyle = FormBorderStyle.None;
@@ -67,7 +69,7 @@ internal sealed class Overlay : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        using (Bitmap bitmap = accent ? RenderAccent(color, brightness) : RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f)))
+        using (Bitmap bitmap = accent ? RenderAccent(color, brightness) : RenderLayer(Width, Height, color, brightness, banner, Math.Max(1f, Native.GetDpiForWindow(Handle) / 96f), text))
         {
             IntPtr screenDc = Native.GetDC(IntPtr.Zero);
             try
@@ -130,7 +132,7 @@ internal sealed class Overlay : Form
         return path;
     }
 
-    private static Bitmap RenderLayer(int width, int height, Color color, float brightness, bool banner, float dpiScale)
+    private static Bitmap RenderLayer(int width, int height, Color color, float brightness, bool banner, float dpiScale, string text)
     {
         Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
         BitmapData pixels = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
@@ -179,29 +181,36 @@ internal sealed class Overlay : Form
             g.ScaleTransform(dpiScale, dpiScale);
             if (banner)
             {
-                Rectangle r = new Rectangle(((int)Math.Round(width / dpiScale) - 390) / 2, 18, 390, 44);
-                for (int i = 10; i >= 1; i--)
-                {
-                    Rectangle glow = Rectangle.Inflate(r, i, i / 2);
-                    using (GraphicsPath path = Pill(glow, 14 + i / 2))
-                    using (Pen pen = new Pen(Color.FromArgb((int)(brightness * 80 / i), color), 2))
-                        g.DrawPath(pen, path);
-                }
-                using (GraphicsPath path = Pill(r, 12))
-                using (Brush fill = new SolidBrush(Color.FromArgb(230,
-                    20 + color.R * 42 / 100, 20 + color.G * 42 / 100, 20 + color.B * 42 / 100)))
-                using (Pen rim = new Pen(Color.FromArgb(110, color), 1))
-                {
-                    g.FillPath(fill, path);
-                    g.DrawPath(rim, path);
-                }
                 using (Font font = new Font("Segoe UI", 18, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (Brush ink = new SolidBrush(Color.White))
-                using (StringFormat format = new StringFormat())
                 {
-                    format.Alignment = StringAlignment.Center;
-                    format.LineAlignment = StringAlignment.Center;
-                    g.DrawString("Miu AI is using your computer", font, ink, r, format);
+                    int logicalWidth = (int)Math.Round(width / dpiScale);
+                    int desiredWidth = (int)Math.Ceiling(g.MeasureString(text, font).Width) + 44;
+                    int pillWidth = Math.Min(Math.Max(80, logicalWidth - 32), Math.Max(160, desiredWidth));
+                    Rectangle r = new Rectangle((logicalWidth - pillWidth) / 2, 18, pillWidth, 44);
+                    for (int i = 10; i >= 1; i--)
+                    {
+                        Rectangle glow = Rectangle.Inflate(r, i, i / 2);
+                        using (GraphicsPath path = Pill(glow, 14 + i / 2))
+                        using (Pen pen = new Pen(Color.FromArgb((int)(brightness * 80 / i), color), 2))
+                            g.DrawPath(pen, path);
+                    }
+                    using (GraphicsPath path = Pill(r, 12))
+                    using (Brush fill = new SolidBrush(Color.FromArgb(230,
+                        20 + color.R * 42 / 100, 20 + color.G * 42 / 100, 20 + color.B * 42 / 100)))
+                    using (Pen rim = new Pen(Color.FromArgb(110, color), 1))
+                    {
+                        g.FillPath(fill, path);
+                        g.DrawPath(rim, path);
+                    }
+                    using (Brush ink = new SolidBrush(Color.White))
+                    using (StringFormat format = new StringFormat())
+                    {
+                        format.Alignment = StringAlignment.Center;
+                        format.LineAlignment = StringAlignment.Center;
+                        format.FormatFlags = StringFormatFlags.NoWrap;
+                        format.Trimming = StringTrimming.EllipsisCharacter;
+                        g.DrawString(text, font, ink, Rectangle.Inflate(r, -14, 0), format);
+                    }
                 }
             }
         }
@@ -238,12 +247,12 @@ internal sealed class Overlay : Form
         return bitmap;
     }
 
-    internal static void SavePreview(string path, Color color, float brightness)
+    internal static void SavePreview(string path, Color color, float brightness, string text)
     {
         string fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
         using (Bitmap preview = new Bitmap(1280, 720))
-        using (Bitmap layer = RenderLayer(1280, 720, color, brightness, true, 1f))
+        using (Bitmap layer = RenderLayer(1280, 720, color, brightness, true, 1f, text))
         using (Graphics g = Graphics.FromImage(preview))
         {
             using (LinearGradientBrush background = new LinearGradientBrush(
@@ -280,14 +289,16 @@ internal sealed class OverlayApp : ApplicationContext
     private readonly Color color;
     private readonly float brightness;
     private readonly string effect;
+    private readonly string text;
     private readonly int periodMs;
     private bool exiting;
 
-    internal OverlayApp(Color color, float brightness, string effect, int periodMs, string verifyDirectory, int demoSeconds, bool showTray, int parentPid)
+    internal OverlayApp(Color color, float brightness, string effect, int periodMs, string verifyDirectory, int demoSeconds, bool showTray, int parentPid, string text)
     {
         this.color = color;
         this.brightness = brightness;
         this.effect = effect;
+        this.text = text;
         this.periodMs = periodMs;
         this.verifyDirectory = verifyDirectory;
         RebuildWindows();
@@ -351,11 +362,11 @@ internal sealed class OverlayApp : ApplicationContext
         accents = effect == "marquee" ? new Overlay[screens.Length] : new Overlay[0];
         for (int i = 0; i < screens.Length; i++)
         {
-            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary, false);
+            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary, false, text);
             windows[i].Show();
             if (effect == "marquee")
             {
-                accents[i] = new Overlay(screens[i], color, brightness, false, true);
+                accents[i] = new Overlay(screens[i], color, brightness, false, true, text);
                 accents[i].Show();
             }
         }
@@ -456,6 +467,7 @@ internal static class Program
         Color color = Color.FromArgb(141, 124, 247);
         float brightness = 1f;
         string effect = "breathing";
+        string text = "Miu AI is using your computer";
         int periodMs = 3000;
         string verify = null;
         string preview = null;
@@ -465,6 +477,7 @@ internal static class Program
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--color" && ++i < args.Length) color = ColorTranslator.FromHtml(args[i]);
+            else if (args[i] == "--text" && ++i < args.Length) text = args[i];
             else if (args[i] == "--brightness" && ++i < args.Length)
             {
                 int percent = int.Parse(args[i]);
@@ -491,9 +504,10 @@ internal static class Program
             }
             else if (args[i] == "--no-tray") noTray = true;
             else if (args[i] == "--parent-pid" && ++i < args.Length) parentPid = int.Parse(args[i]);
-            else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--brightness 0..100] [--effect breathing|steady|blink|marquee|heartbeat] [--period-ms 1200..10000] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--parent-pid N]");
+            else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--text message] [--brightness 0..100] [--effect breathing|steady|blink|marquee|heartbeat] [--period-ms 1200..10000] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--parent-pid N]");
         }
-        if (preview != null) { Overlay.SavePreview(preview, color, brightness); return; }
+        if (String.IsNullOrWhiteSpace(text) || text.Length > 160 || Array.Exists(text.ToCharArray(), Char.IsControl)) throw new ArgumentException("text");
+        if (preview != null) { Overlay.SavePreview(preview, color, brightness, text); return; }
         // Live overlays must belong to the tray; an accidental manual launch cannot outlive a session.
         if (parentPid <= 0 && verify == null && demoSeconds == 0) return;
         Application.EnableVisualStyles();
@@ -501,7 +515,7 @@ internal static class Program
         using (var mutex = new System.Threading.Mutex(true, @"Local\MiuAIOverlay", out created))
         {
             if (!created) return;
-            try { Application.Run(new OverlayApp(color, brightness, effect, periodMs, verify, demoSeconds, !noTray, parentPid)); }
+            try { Application.Run(new OverlayApp(color, brightness, effect, periodMs, verify, demoSeconds, !noTray, parentPid, text)); }
             finally { mutex.ReleaseMutex(); }
         }
     }

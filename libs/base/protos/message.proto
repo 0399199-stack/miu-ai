@@ -834,6 +834,7 @@ message MiuOverlaySettings {
   uint32 period_ms = 4;
   string effect = 5;
   bool query = 6;
+  string text = 7;
 }
 
 message Misc {
@@ -882,6 +883,7 @@ message Misc {
     string miu_overlay_color = 40;
     bool miu_overlay_enabled = 41;
     MiuOverlaySettings miu_overlay_settings = 42;
+    string miu_overlay_text = 43;
   }
 }
 

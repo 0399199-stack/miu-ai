@@ -328,6 +328,9 @@ Future<void> showMiuPetWindow() async {
         frame.bottom - _miuPetSmallSize.height - 24));
   }
   if (!_miuPetWindowVisible) return;
+  await windowManager.setBackgroundColor(Colors.transparent);
+  await windowManager.setAsFrameless();
+  await windowManager.setHasShadow(false);
   await windowManager.setAlwaysOnTop(true);
   await windowManager.setSkipTaskbar(true);
   await windowManager.restore();
@@ -359,6 +362,8 @@ showCmWindow({bool isStartup = false}) async {
   } else if (_isCmReadyToShow) {
     if (_miuPetWindowVisible) {
       _miuPetWindowVisible = false;
+      await windowManager.setTitleBarStyle(
+          kUseCompatibleUiMode ? TitleBarStyle.normal : TitleBarStyle.hidden);
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
       await windowManager.setSkipTaskbar(false);
@@ -367,6 +372,11 @@ showCmWindow({bool isStartup = false}) async {
       return;
     }
     if (await windowManager.getOpacity() != 1) {
+      if (isWindows && bind.mainGetAppNameSync() == 'MiuAI') {
+        await windowManager.setTitleBarStyle(kUseCompatibleUiMode
+            ? TitleBarStyle.normal
+            : TitleBarStyle.hidden);
+      }
       await windowManager.setOpacity(1);
       if (isWindows && bind.mainGetAppNameSync() == 'MiuAI') {
         await windowManager.restore();

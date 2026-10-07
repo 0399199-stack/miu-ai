@@ -467,6 +467,11 @@ class RustdeskImpl {
     throw UnimplementedError('sessionSetMiuOverlayEnabled');
   }
 
+  Future<void> sessionSetMiuOverlayText(
+      {required UuidValue sessionId, required String text, dynamic hint}) {
+    throw UnimplementedError('sessionSetMiuOverlayText');
+  }
+
   Future<void> sessionSetMiuOverlaySettings(
       {required UuidValue sessionId,
       required bool enabled,

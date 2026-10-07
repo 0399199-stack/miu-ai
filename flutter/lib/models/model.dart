@@ -131,6 +131,7 @@ class FfiModel with ChangeNotifier {
   int miuOverlayIntensity = 100;
   int miuOverlayPeriodMs = 3000;
   String miuOverlayEffect = 'breathing';
+  String miuOverlayText = 'Miu AI is using your computer';
   WeakReference<FFI> parent;
   late final SessionID sessionId;
 
@@ -276,6 +277,8 @@ class FfiModel with ChangeNotifier {
     const effects = {'breathing', 'steady', 'blink', 'marquee', 'heartbeat'};
     final effect = evt['effect']?.toString() ?? '';
     if (effects.contains(effect)) miuOverlayEffect = effect;
+    final text = evt['text']?.toString() ?? '';
+    if (text.isNotEmpty) miuOverlayText = text;
     notifyListeners();
   }
 

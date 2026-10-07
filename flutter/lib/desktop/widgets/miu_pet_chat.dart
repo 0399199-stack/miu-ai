@@ -379,20 +379,24 @@ class MiuPetHost extends StatefulWidget {
 
 class _MiuPetHostState extends State<MiuPetHost>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _breathe = AnimationController(
+  late final AnimationController _motion = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1900),
-  )..repeat(reverse: true);
+    duration: const Duration(milliseconds: 3600),
+  )..repeat();
   bool _expanded = false;
   int _mood = 0;
   int _lastUnread = 0;
   Timer? _reactionTimer;
+  Timer? _idleTimer;
 
   @override
   void initState() {
     super.initState();
     _lastUnread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
     widget.chatModel.addListener(_onChatChanged);
+    _idleTimer = Timer.periodic(const Duration(seconds: 7), (_) {
+      if (mounted && !_expanded) setState(() => _mood = (_mood + 1) % 10);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onExpanded(false);
     });
@@ -412,7 +416,7 @@ class _MiuPetHostState extends State<MiuPetHost>
     final unread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
     if (unread > _lastUnread) {
       _reactionTimer?.cancel();
-      setState(() => _mood = 2);
+      setState(() => _mood = 5);
       _reactionTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) setState(() => _mood = 0);
       });
@@ -426,14 +430,15 @@ class _MiuPetHostState extends State<MiuPetHost>
   void dispose() {
     widget.chatModel.removeListener(_onChatChanged);
     _reactionTimer?.cancel();
-    _breathe.dispose();
+    _idleTimer?.cancel();
+    _motion.dispose();
     super.dispose();
   }
 
   void _toggleChat() {
     setState(() {
       _expanded = !_expanded;
-      _mood = (_mood + 1) % 4;
+      _mood = (_mood + 1) % 10;
     });
     widget.onExpanded(_expanded);
   }
@@ -443,74 +448,97 @@ class _MiuPetHostState extends State<MiuPetHost>
     final unread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
     return Material(
       color: Colors.transparent,
-      child: Padding(
-        padding: const EdgeInsets.all(5),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(27),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(27),
-              border: Border.all(color: Colors.white.withOpacity(0.9)),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xF9F8FBFF), Color(0xF3E5EDFF)],
-              ),
-              boxShadow: const [
-                BoxShadow(color: Color(0x3392A4D5), blurRadius: 24)
-              ],
-            ),
-            child: Column(children: [
-              GestureDetector(
-                onPanStart: (_) => windowManager.startDragging(),
-                onTap: _toggleChat,
-                child: SizedBox(
-                  height: _expanded ? 140 : 176,
-                  child: Column(children: [
-                    const SizedBox(height: 8),
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Icon(Icons.auto_awesome_rounded,
-                          size: 15, color: Color(0xFF7184EF)),
-                      const SizedBox(width: 5),
-                      const Text('Miu',
-                          style: TextStyle(
-                              color: Color(0xFF31427B),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700)),
-                      if (unread > 0) const SizedBox(width: 6),
-                      if (unread > 0)
-                        const CircleAvatar(
-                            radius: 3, backgroundColor: Color(0xFFEF709C)),
-                    ]),
-                    AnimatedBuilder(
-                        animation: _breathe,
-                        builder: (_, __) {
-                          final lift = math.sin(_breathe.value * math.pi) * 5;
-                          return Transform.translate(
-                            offset: Offset(0, -lift),
-                            child: Transform.scale(
-                              scale: 1 + 0.035 * _breathe.value,
-                              child: _MiuPetFace(
-                                  mood: _mood,
-                                  blink: _breathe.value > 0.92 &&
-                                      _breathe.value < 0.97),
-                            ),
-                          );
-                        }),
-                    Text(['点我聊天', '你好呀 ✨', '收到啦', '陪你一会儿'][_mood],
-                        style: const TextStyle(
-                            fontSize: 12, color: Color(0xFF64739A))),
-                  ]),
-                ),
-              ),
-              if (_expanded)
-                Expanded(
+      child: Stack(
+        children: [
+          if (_expanded)
+            Positioned(
+              top: 5,
+              left: 5,
+              right: 5,
+              bottom: 163,
+              child: MiuGlass(
+                padding: EdgeInsets.zero,
+                radius: 24,
+                child: Column(children: [
+                  GestureDetector(
+                    onPanStart: (_) => windowManager.startDragging(),
+                    child: const Padding(
+                      padding: EdgeInsets.fromLTRB(18, 12, 18, 5),
+                      child: Row(children: [
+                        Icon(Icons.chat_bubble_outline_rounded,
+                            size: 16, color: Color(0xFF657BE9)),
+                        SizedBox(width: 7),
+                        Text('Miu 消息',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF31427B))),
+                      ]),
+                    ),
+                  ),
+                  Expanded(
                     child: MiuChatView(
                         chatModel: widget.chatModel,
-                        keyForPeer: widget.keyForPeer)),
-            ]),
+                        keyForPeer: widget.keyForPeer),
+                  ),
+                ]),
+              ),
+            ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            width: 196,
+            height: 192,
+            child: Tooltip(
+              message: '点我聊天 · 拖动可移动',
+              child: GestureDetector(
+                onPanStart: (_) => windowManager.startDragging(),
+                onTap: _toggleChat,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: AnimatedBuilder(
+                    animation: _motion,
+                    builder: (_, __) {
+                      final phase = _motion.value * math.pi * 2;
+                      final lively = _mood == 0 || _mood == 5 || _mood == 7;
+                      final lift = lively
+                          ? -7 * math.sin(phase).abs()
+                          : -4 * math.sin(phase);
+                      final sway = 2.5 * math.sin(phase + _mood * 0.6);
+                      final tilt = (_mood == 2 ? 0.06 : _mood == 8 ? -0.06 : 0.0) +
+                          0.035 * math.sin(phase);
+                      final scale = 1 + 0.025 * math.sin(phase - 0.5);
+                      final blink = (1.0 -
+                              (_motion.value - 0.82).abs() / 0.035)
+                          .clamp(0.0, 1.0)
+                          .toDouble();
+                      return Transform.translate(
+                        offset: Offset(sway, lift),
+                        child: Transform.rotate(
+                          angle: tilt,
+                          child: Transform.scale(
+                            scale: scale,
+                            child: Stack(children: [
+                              _MiuPetFace(mood: _mood, blink: blink),
+                              if (unread > 0)
+                                const Positioned(
+                                  right: 20,
+                                  top: 22,
+                                  child: CircleAvatar(
+                                    radius: 5,
+                                    backgroundColor: Color(0xFFEF709C),
+                                  ),
+                                ),
+                            ]),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -520,83 +548,176 @@ class _MiuPetFace extends StatelessWidget {
   const _MiuPetFace({required this.mood, required this.blink});
 
   final int mood;
-  final bool blink;
+  final double blink;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 100,
-      height: 108,
-      child: Stack(alignment: Alignment.center, children: [
-        Positioned(
-            top: 0,
-            child: Container(
-              width: 10,
-              height: 18,
-              decoration: BoxDecoration(
-                  color: const Color(0xFF8E9CF5),
-                  borderRadius: BorderRadius.circular(9)),
-            )),
-        Positioned(
-            top: 0,
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: const BoxDecoration(
-                  shape: BoxShape.circle, color: Color(0xFFB4C8FF)),
-            )),
-        Positioned(
-            top: 15,
-            child: Container(
-              width: 96,
-              height: 88,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(36),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFB8E6FF),
-                    Color(0xFF7D8FF4),
-                    Color(0xFFB498F5)
-                  ],
-                ),
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.85), width: 2),
-                boxShadow: const [
-                  BoxShadow(
-                      color: Color(0x66788EEB),
-                      blurRadius: 15,
-                      offset: Offset(0, 6))
-                ],
+      width: 196,
+      height: 192,
+      child: Center(
+        child: SizedBox.square(
+          dimension: 178,
+          child: Stack(fit: StackFit.expand, children: [
+            Image.asset('assets/miu_cat_head.png', filterQuality: FilterQuality.medium),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: SizedBox.expand(
+                key: ValueKey(mood),
+                child: CustomPaint(painter: _MiuCatExpression(mood, blink)),
               ),
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      _eye(blink || mood == 2),
-                      const SizedBox(width: 25),
-                      _eye(blink),
-                    ]),
-                    const SizedBox(height: 6),
-                    Text(
-                        mood == 1
-                            ? 'ᴗ'
-                            : mood == 3
-                                ? '▽'
-                                : '◡',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 25, height: 0.8)),
-                  ]),
-            )),
-      ]),
+            ),
+          ]),
+        ),
+      ),
     );
   }
+}
 
-  Widget _eye(bool wink) => Container(
-        width: 10,
-        height: wink ? 3 : 13,
-        decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(7)),
-      );
+class _MiuCatExpression extends CustomPainter {
+  const _MiuCatExpression(this.mood, this.blink);
+
+  final int mood;
+  final double blink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 126, size.height / 126);
+    const navy = Color(0xFF143571);
+    final line = Paint()
+      ..color = navy
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round;
+
+    void eye(double x, bool closed, {double look = 0}) {
+      if (closed || blink > 0.92) {
+        final curve = Path()
+          ..moveTo(x - 9, 74)
+          ..quadraticBezierTo(x, 82, x + 9, 74);
+        canvas.drawPath(curve, line);
+        return;
+      }
+      final area = Rect.fromCenter(
+          center: Offset(x, 75), width: 18, height: 24 * (1 - blink) + 2);
+      canvas.drawOval(area.inflate(1.5), Paint()..color = Colors.white);
+      canvas.drawOval(
+          area,
+          Paint()
+            ..shader = const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF12295D), Color(0xFF2059BC), Color(0xFF39C8F4)],
+            ).createShader(area));
+      canvas.drawCircle(Offset(x + look, 69), 4,
+          Paint()..color = const Color(0xFF102D68));
+      canvas.drawCircle(Offset(x - 3 + look, 69), 2.6,
+          Paint()..color = Colors.white);
+      canvas.drawCircle(Offset(x + 4, 79), 1.2,
+          Paint()..color = Colors.white.withOpacity(0.9));
+    }
+
+    eye(45, mood == 4 || mood == 7 || mood == 9,
+        look: mood == 2 ? 2 : mood == 6 ? -2 : 0);
+    eye(81, mood == 1 || mood == 4 || mood == 7 || mood == 9,
+        look: mood == 6 ? -2 : mood == 8 ? 2 : 0);
+
+    if (mood == 3 || mood == 8) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(73, 57)
+            ..quadraticBezierTo(81, mood == 3 ? 54 : 62, 89, 58),
+          line..strokeWidth = 2.3);
+    }
+    if (mood == 2 || mood == 5) {
+      canvas.drawOval(
+          Rect.fromCenter(center: const Offset(63, 96), width: 8, height: 10),
+          Paint()..color = const Color(0xFFDF7086));
+    } else if (mood == 3 || mood == 8) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(58, 98)
+            ..quadraticBezierTo(63, 94, 68, 98),
+          line..strokeWidth = 2);
+    } else if (mood == 4 || mood == 6 || mood == 9) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(57, 94)
+            ..quadraticBezierTo(63, 100, 69, 94),
+          line..strokeWidth = 2.5);
+    } else {
+      final mouth = Path()
+        ..moveTo(54, 92)
+        ..quadraticBezierTo(63, 105, 72, 92)
+        ..quadraticBezierTo(63, 97, 54, 92)
+        ..close();
+      canvas.drawPath(mouth, Paint()..color = const Color(0xFFE74D71));
+      canvas.drawPath(mouth, line..strokeWidth = 1.4);
+    }
+
+    final accent = Paint()
+      ..color = mood == 6 ? const Color(0xFFF47EAB) : const Color(0xFF368DF3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    if (mood == 2 || mood == 8) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(98, 29)
+            ..quadraticBezierTo(106, 23, 109, 30)
+            ..quadraticBezierTo(111, 35, 105, 39),
+          accent);
+      canvas.drawCircle(const Offset(105, 43), 1.4, accent..style = PaintingStyle.fill);
+    } else if (mood == 4) {
+      for (var i = 0; i < 2; i++) {
+        final x = 98.0 + i * 7;
+        canvas.drawPath(
+            Path()
+              ..moveTo(x, 31)
+              ..lineTo(x + 5, 31)
+              ..lineTo(x, 37)
+              ..lineTo(x + 5, 37),
+            accent);
+      }
+    } else if (mood == 5) {
+      canvas.drawLine(const Offset(105, 27), const Offset(105, 36), accent);
+      canvas.drawCircle(const Offset(105, 41), 1.7, accent..style = PaintingStyle.fill);
+    } else if (mood == 6) {
+      final heart = Path()
+        ..moveTo(105, 41)
+        ..cubicTo(94, 35, 99, 27, 105, 32)
+        ..cubicTo(111, 27, 116, 35, 105, 41)
+        ..close();
+      canvas.drawPath(heart, accent..style = PaintingStyle.fill);
+    } else if (mood == 7) {
+      final star = Path()
+        ..moveTo(105, 27)
+        ..lineTo(107, 32)
+        ..lineTo(112, 34)
+        ..lineTo(107, 36)
+        ..lineTo(105, 41)
+        ..lineTo(103, 36)
+        ..lineTo(98, 34)
+        ..lineTo(103, 32)
+        ..close();
+      canvas.drawPath(star, accent..style = PaintingStyle.fill);
+    } else if (mood == 9) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(106, 40)
+            ..lineTo(106, 29)
+            ..lineTo(112, 27),
+          accent);
+      canvas.drawOval(
+          Rect.fromCenter(center: const Offset(103, 41), width: 5, height: 3),
+          accent..style = PaintingStyle.fill);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_MiuCatExpression oldDelegate) =>
+      mood != oldDelegate.mood || blink != oldDelegate.blink;
 }

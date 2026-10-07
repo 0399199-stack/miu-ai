@@ -701,6 +701,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("intensity", &settings.intensity.to_string()),
                 ("period_ms", &settings.period_ms.to_string()),
                 ("effect", &settings.effect),
+                ("text", &settings.text),
             ],
             &[],
         );

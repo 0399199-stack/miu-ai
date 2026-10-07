@@ -26,6 +26,7 @@ import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 import './miu_task_center.dart';
 import './miu_pet_chat.dart';
+import './miu_send_image_panel.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -468,6 +469,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   late Debouncer<int> _debouncerHide;
   OverlayEntry? _taskCenter;
   OverlayEntry? _chatPanel;
+  OverlayEntry? _imagePanel;
   bool _isCursorOverImage = false;
   final _fraction = 0.5.obs;
   final _edge = _ToolbarEdge.top.obs;
@@ -527,6 +529,22 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   void _closeChatPanel() {
     final entry = _chatPanel;
     _chatPanel = null;
+    entry?.remove();
+    entry?.dispose();
+  }
+
+  void _showImagePanel(BuildContext context) {
+    if (_imagePanel != null) return;
+    _imagePanel = showMiuSendImagePanel(context, widget.ffi, _closeImagePanel,
+        readClipboardPng: () async {
+      final bytes = await (bind as dynamic).miuReadClipboardPng();
+      return Uint8List.fromList(bytes as List<int>);
+    });
+  }
+
+  void _closeImagePanel() {
+    final entry = _imagePanel;
+    _imagePanel = null;
     entry?.remove();
     entry?.dispose();
   }
@@ -698,6 +716,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (oldWidget.ffi != widget.ffi) {
       _closeTaskCenter();
       _closeChatPanel();
+      _closeImagePanel();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _syncDockingOptions(force: false);
@@ -715,6 +734,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     ++_dockingOptionSyncSerial;
     _closeTaskCenter();
     _closeChatPanel();
+    _closeImagePanel();
     widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
     super.dispose();
   }
@@ -884,6 +904,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             width: isHorizontal ? 10 : 0, height: isHorizontal ? 0 : 10));
       }
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
+      if (_isMiuToolbar) toolbarItems.add(_MiuOverlayTextMenu(ffi: widget.ffi));
       if (_isMiuToolbar) {
         toolbarItems.add(_IconMenuButton(
           icon: AnimatedBuilder(
@@ -912,6 +933,22 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           color: _ToolbarTheme.blueColor,
           hoverColor: _ToolbarTheme.hoverBlueColor,
           onPressed: () => _showChatPanel(context),
+        ));
+        toolbarItems.add(_IconMenuButton(
+          icon: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.image_outlined, size: 17, color: Colors.white),
+              SizedBox(width: 5),
+              Text('图片',
+                  style: TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+          width: 72,
+          tooltip: '发送图片并在 B 机打开',
+          color: _ToolbarTheme.blueColor,
+          hoverColor: _ToolbarTheme.hoverBlueColor,
+          onPressed: () => _showImagePanel(context),
         ));
       }
       if (!isWeb && widget.ffi.ffiModel.isPeerWindows &&
@@ -3017,6 +3054,137 @@ class _GlowColorMenu extends StatelessWidget {
           ffi: ffi,
           onPressed: enabled == null ? null : () => _showSettings(context, model),
           child: const Text('强度、频率与效果…'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiuOverlayTextMenu extends StatelessWidget {
+  final FFI ffi;
+
+  const _MiuOverlayTextMenu({required this.ffi});
+
+  static const presets = [
+    'Miu AI is using your computer',
+    'Miu AI is learning your usage habits',
+    'Miu AI is taking in your screen',
+    'Miu AI is reading your data',
+    'Miu AI is executing commands',
+    'Miu AI is taking over your computer',
+  ];
+
+  void _setText(FfiModel model, String text) {
+    if (text == model.miuOverlayText || !model.miuPeerAuthenticated) return;
+    (bind as dynamic).sessionSetMiuOverlayText(
+        sessionId: ffi.sessionId, text: text);
+  }
+
+  Future<void> _showCustomText(BuildContext context, FfiModel model) async {
+    final controller = TextEditingController(text: model.miuOverlayText);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => material.Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              width: 450,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFF).withOpacity(0.9),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.8)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('自定义横幅文字',
+                      style: Theme.of(dialogContext).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  const Text('显示在 B 机屏幕顶部，最多 80 个字符'),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: 80,
+                    maxLines: 1,
+                    decoration: const InputDecoration(
+                      hintText: '输入要显示的文字',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (value) =>
+                        Navigator.of(dialogContext).pop(value.trim()),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(dialogContext)
+                          .pop(controller.text.trim()),
+                      child: const Text('显示在 B 机'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    controller.dispose();
+    if (text != null && text.isNotEmpty && !text.contains(RegExp(r'[\r\n]'))) {
+      _setText(model, text);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final model = Provider.of<FfiModel>(context);
+    return _IconSubmenuButton(
+      tooltip: '更换 B 机光效横幅文字',
+      icon: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.text_fields_rounded, size: 18, color: Colors.white),
+          SizedBox(width: 4),
+          Text('文字', style: TextStyle(fontSize: 12, color: Colors.white)),
+        ],
+      ),
+      width: 70,
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+      ffi: ffi,
+      menuChildrenGetter: (_) => [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: SizedBox(
+            width: 340,
+            child: Text('当前：${model.miuOverlayText}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12)),
+          ),
+        ),
+        const Divider(),
+        for (final preset in presets)
+          MenuButton(
+            ffi: ffi,
+            onPressed: model.miuPeerAuthenticated
+                ? () => _setText(model, preset)
+                : null,
+            child: Text(preset),
+          ),
+        const Divider(),
+        MenuButton(
+          ffi: ffi,
+          onPressed: model.miuPeerAuthenticated
+              ? () => _showCustomText(context, model)
+              : null,
+          child: const Text('自定义文字…'),
         ),
       ],
     );
