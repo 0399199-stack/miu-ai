@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:path/path.dart' as path;
-import 'package:uuid/uuid.dart';
 
 import 'miu_glass.dart';
 import 'miu_image_transfer.dart';
@@ -17,14 +16,14 @@ OverlayEntry showMiuSendImagePanel(
   BuildContext context,
   FFI ffi,
   VoidCallback onClose, {
-  required Future<Uint8List> Function() readClipboardPng,
+  required Future<String> Function() saveClipboardPng,
 }) {
   final entry = OverlayEntry(
       builder: (_) => LayoutBuilder(
           builder: (_, constraints) => _MiuSendImagePanel(
                 ffi: ffi,
                 onClose: onClose,
-                readClipboardPng: readClipboardPng,
+                saveClipboardPng: saveClipboardPng,
                 viewport: constraints.biggest,
               )));
   Overlay.of(context).insert(entry);
@@ -35,13 +34,13 @@ class _MiuSendImagePanel extends StatefulWidget {
   const _MiuSendImagePanel({
     required this.ffi,
     required this.onClose,
-    required this.readClipboardPng,
+    required this.saveClipboardPng,
     required this.viewport,
   });
 
   final FFI ffi;
   final VoidCallback onClose;
-  final Future<Uint8List> Function() readClipboardPng;
+  final Future<String> Function() saveClipboardPng;
   final Size viewport;
 
   @override
@@ -95,13 +94,7 @@ class _MiuSendImagePanelState extends State<_MiuSendImagePanel> {
   Future<void> _pasteImage() async {
     if (_sending) return;
     try {
-      final png = await widget.readClipboardPng();
-      if (png.isEmpty || png.length > miuImageMaxBytes) {
-        throw const FormatException('剪贴板图片为空或超过 25 MB');
-      }
-      final file = File(path.join(Directory.systemTemp.path,
-          'MiuAI-Clipboard-${const Uuid().v4()}.png'));
-      await file.writeAsBytes(png, flush: true);
+      final file = File(await widget.saveClipboardPng());
       if (!mounted) {
         await file.delete();
         return;

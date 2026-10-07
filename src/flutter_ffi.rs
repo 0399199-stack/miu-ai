@@ -802,14 +802,22 @@ pub fn session_input_os_password(session_id: SessionID, value: String) {
     }
 }
 
-pub fn miu_read_clipboard_png() -> ResultType<Vec<u8>> {
+pub fn miu_save_clipboard_png() -> String {
     #[cfg(target_os = "windows")]
     {
-        crate::clipboard::miu_read_clipboard_png()
+        let result = crate::clipboard::miu_read_clipboard_png().and_then(|png| {
+            let path = std::env::temp_dir().join(format!(
+                "MiuAI-Clipboard-{}.png",
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::write(&path, png)?;
+            Ok(path.to_string_lossy().into_owned())
+        });
+        result.unwrap_or_else(|error| format!("error:{error}"))
     }
     #[cfg(not(target_os = "windows"))]
     {
-        hbb_common::bail!("Clipboard image paste is available on Windows only")
+        "error:Clipboard image paste is available on Windows only".to_owned()
     }
 }
 
