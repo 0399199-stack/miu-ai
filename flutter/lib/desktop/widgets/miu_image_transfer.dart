@@ -8,8 +8,6 @@ import 'package:image/image.dart' as image;
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
-import 'miu_remote_task_executor.dart';
-
 const miuImageMaxBytes = 25 * 1024 * 1024;
 const _imageExtensions = <String>{
   '.png',
@@ -150,12 +148,9 @@ Future<String> sendAndOpenMiuImage({
     if (controller.closed || !controller.ffiModel.miuPeerAuthenticated) {
       throw StateError('远程连接已断开，图片已传送但尚未打开');
     }
-    final opened = await executeMiuRemoteTask(
-        controller: controller,
-        kind: MiuRemoteTaskKind.program,
-        value: remotePath);
-    if (!opened.succeeded) {
-      throw StateError('图片已保存到 B 机，但打开失败：${opened.output}');
+    final opened = await controller.chatModel.requestMiuOpenImage(remotePath);
+    if (!opened) {
+      throw StateError('图片已保存到 B 机，但未能在桌面打开');
     }
     return remotePath;
   } finally {

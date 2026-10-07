@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -14,10 +16,13 @@ import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:path/path.dart' as path;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
+import '../desktop/widgets/miu_ai_credentials.dart';
 import '../main.dart';
 import 'model.dart';
 
@@ -51,6 +56,21 @@ class MessageBody {
   void clear() {
     chatMessages.clear();
   }
+}
+
+const _miuControlPrefix = '\u001eMiuAI-control-v1:';
+final _miuImageName =
+    RegExp(r'^MiuAI-[0-9a-f]{32}\.(?:png|jpg|jpeg|webp|gif|bmp)$');
+
+bool isMiuImageInHome(String remotePath, String userHome) {
+  if (!path.windows.isAbsolute(userHome) ||
+      !path.windows.isAbsolute(remotePath) ||
+      path.windows.split(remotePath).contains('..') ||
+      !_miuImageName.hasMatch(path.windows.basename(remotePath))) return false;
+  final expected = path.windows.join(
+      userHome, path.windows.basename(remotePath));
+  return path.windows.normalize(remotePath).toLowerCase() ==
+      path.windows.normalize(expected).toLowerCase();
 }
 
 class ChatModel with ChangeNotifier {
@@ -91,6 +111,16 @@ class ChatModel with ChangeNotifier {
 
   late final Map<MessageKey, MessageBody> _messages = {};
   final Map<MessageKey, int> _miuUnread = {};
+  final Map<String, Completer<Map<String, dynamic>>> _miuPendingControls = {};
+  bool? _miuPetVisible;
+  bool? _miuPetAiEnabled;
+  String? _miuPetPersona;
+  int? _miuPetReplyLength;
+
+  bool? get miuPetVisible => _miuPetVisible;
+  bool? get miuPetAiEnabled => _miuPetAiEnabled;
+  String? get miuPetPersona => _miuPetPersona;
+  int? get miuPetReplyLength => _miuPetReplyLength;
 
   int miuUnreadCount(MessageKey key) => _miuUnread[key] ?? 0;
 
@@ -358,6 +388,10 @@ class ChatModel with ChangeNotifier {
       return;
     }
     if (text.isEmpty) return;
+    if (appName == 'MiuAI' && isDesktop && text.startsWith(_miuControlPrefix)) {
+      await _receiveMiuControl(id, text.substring(_miuControlPrefix.length));
+      return;
+    }
     if (desktopType == DesktopType.cm && appName != 'MiuAI') {
       await showCmWindow();
     }
@@ -452,6 +486,216 @@ class ChatModel with ChangeNotifier {
       mobileClearClientUnread(messagekey.connId);
     }
     latestReceivedKey = messagekey;
+    notifyListeners();
+  }
+
+  Future<void> _receiveMiuControl(int id, String encoded) async {
+    if (encoded.length > 4096) return;
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(encoded) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    final requestId = data['id'];
+    final action = data['action'];
+    if (requestId is! String ||
+        !RegExp(r'^[0-9a-f]{32}$').hasMatch(requestId) ||
+        action is! String) return;
+    final session = parent.target;
+    if (session == null || session.closed) return;
+
+    if (id == clientModeID) {
+      if (!session.ffiModel.miuPeerAuthenticated || action != 'result') return;
+      final pending = _miuPendingControls.remove(requestId);
+      if (pending == null) return;
+      if (data['visible'] is bool) {
+        _miuPetVisible = data['visible'] as bool;
+        notifyListeners();
+      }
+      if (data['aiEnabled'] is bool &&
+          data['persona'] is String &&
+          data['replyLength'] is int) {
+        _miuPetAiEnabled = data['aiEnabled'] as bool;
+        _miuPetPersona = data['persona'] as String;
+        _miuPetReplyLength = data['replyLength'] as int;
+        notifyListeners();
+      }
+      pending.complete(data);
+      return;
+    }
+
+    if (desktopType != DesktopType.cm) return;
+    final clients = session.serverModel.clients;
+    final client = clients.firstWhereOrNull((client) => client.id == id);
+    if (client == null ||
+        !client.authorized ||
+        client.disconnected ||
+        client.isFileTransfer ||
+        client.isViewCamera ||
+        client.isTerminal ||
+        client.portForward.isNotEmpty) return;
+    var ok = false;
+    if (action == 'pet-state') {
+      ok = true;
+    } else if (action == 'pet-visible' && data['value'] is bool) {
+      session.serverModel.setMiuPetVisible(data['value'] as bool);
+      ok = true;
+    } else if (action == 'open-image' && data['value'] is String) {
+      if (client.keyboard && client.file) {
+        ok = await _openMiuImage(data['value'] as String);
+      }
+    } else if (action == 'ai-state') {
+      ok = true;
+    } else if (action == 'ai-settings' && data['value'] is Map) {
+      final settings = data['value'] as Map;
+      final enabled = settings['enabled'];
+      final persona = settings['persona'];
+      final replyLength = settings['replyLength'];
+      if (enabled is bool &&
+          persona is String &&
+          persona.length <= 500 &&
+          replyLength is int &&
+          replyLength >= 1 &&
+          replyLength <= 3) {
+        try {
+          if (enabled && MiuAiCredentialStore().read()?.isNotEmpty != true) {
+            throw StateError('B 机尚未设置 DeepSeek API Key');
+          }
+          await bind.mainSetLocalOption(key: 'miu-ai-persona', value: persona);
+          await bind.mainSetLocalOption(
+              key: 'miu-ai-reply-length', value: replyLength.toString());
+          await bind.mainSetLocalOption(
+              key: 'miu-ai-enabled', value: enabled ? 'Y' : 'N');
+          ok = true;
+        } catch (_) {
+          ok = false;
+        }
+      }
+    } else {
+      return;
+    }
+    if (clients.any((current) =>
+        current.id == id && current.authorized && !current.disconnected)) {
+      final result = <String, dynamic>{
+        'id': requestId,
+        'action': 'result',
+        'ok': ok,
+        'visible': session.serverModel.miuPetVisible,
+      };
+      if (action == 'ai-state' || action == 'ai-settings') {
+        result.addAll(_readMiuPetAiSettings());
+      }
+      bind.cmSendChat(
+          connId: id,
+          msg: '$_miuControlPrefix${jsonEncode(result)}');
+    }
+  }
+
+  Map<String, dynamic> _readMiuPetAiSettings() {
+    final length = int.tryParse(
+        bind.mainGetLocalOption(key: 'miu-ai-reply-length'));
+    return {
+      'aiEnabled': bind.mainGetLocalOption(key: 'miu-ai-enabled') == 'Y' &&
+          MiuAiCredentialStore().read()?.isNotEmpty == true,
+      'persona': bind.mainGetLocalOption(key: 'miu-ai-persona'),
+      'replyLength': length != null && length >= 1 && length <= 3 ? length : 1,
+    };
+  }
+
+  Future<bool> _openMiuImage(String remotePath) async {
+    final home = Platform.environment['USERPROFILE'] ?? '';
+    if (!isMiuImageInHome(remotePath, home)) return false;
+    final file = File(remotePath);
+    try {
+      if (await FileSystemEntity.type(file.path, followLinks: false) !=
+          FileSystemEntityType.file) return false;
+      final resolved = await file.resolveSymbolicLinks();
+      if (!isMiuImageInHome(resolved, home)) return false;
+      final size = await file.length();
+      if (size < 1 || size > 25 * 1024 * 1024) return false;
+      return await launchUrl(Uri.file(file.path),
+          mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _requestMiuControl(
+      String action, Object? value) async {
+    final session = parent.target;
+    if (!isWindows ||
+        appName != 'MiuAI' ||
+        session == null ||
+        session.closed ||
+        session.connType != ConnType.defaultConn ||
+        !session.ffiModel.miuPeerAuthenticated) return null;
+    final requestId = const Uuid().v4().replaceAll('-', '');
+    final pending = Completer<Map<String, dynamic>>();
+    _miuPendingControls[requestId] = pending;
+    try {
+      bind.sessionSendChat(
+          sessionId: sessionId,
+          text: '$_miuControlPrefix${jsonEncode({
+                'id': requestId,
+                'action': action,
+                'value': value,
+              })}');
+      return await pending.future.timeout(const Duration(seconds: 12));
+    } catch (_) {
+      return null;
+    } finally {
+      _miuPendingControls.remove(requestId);
+    }
+  }
+
+  Future<void> refreshMiuPetVisible() async {
+    await _requestMiuControl('pet-state', null);
+  }
+
+  Future<bool> setMiuPetVisible(bool visible) async {
+    final result = await _requestMiuControl('pet-visible', visible);
+    return result?['ok'] == true && result?['visible'] == visible;
+  }
+
+  Future<bool> requestMiuOpenImage(String remotePath) async {
+    if (!_miuImageName.hasMatch(path.windows.basename(remotePath))) return false;
+    final result = await _requestMiuControl('open-image', remotePath);
+    return result?['ok'] == true;
+  }
+
+  Future<void> refreshMiuPetAiSettings() async {
+    await _requestMiuControl('ai-state', null);
+  }
+
+  Future<bool> setMiuPetAiSettings({
+    required bool enabled,
+    required String persona,
+    required int replyLength,
+  }) async {
+    if (persona.length > 500 || replyLength < 1 || replyLength > 3) {
+      return false;
+    }
+    final result = await _requestMiuControl('ai-settings', {
+      'enabled': enabled,
+      'persona': persona,
+      'replyLength': replyLength,
+    });
+    return result?['ok'] == true &&
+        result?['aiEnabled'] == enabled &&
+        result?['persona'] == persona &&
+        result?['replyLength'] == replyLength;
+  }
+
+  void resetMiuControlState() {
+    _miuPetVisible = null;
+    _miuPetAiEnabled = null;
+    _miuPetPersona = null;
+    _miuPetReplyLength = null;
+    for (final pending in _miuPendingControls.values) {
+      if (!pending.isCompleted) pending.complete(<String, dynamic>{'ok': false});
+    }
+    _miuPendingControls.clear();
     notifyListeners();
   }
 

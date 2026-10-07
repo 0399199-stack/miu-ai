@@ -408,7 +408,7 @@ hideCmWindow({bool isStartup = false}) async {
     await windowManager.hide();
     _isCmReadyToShow = true;
     if (isWindows && appName == 'MiuAI' &&
-        gFFI.serverModel.miuPetClient != null) {
+        gFFI.serverModel.miuPetShouldShow) {
       await showMiuPetWindow();
     }
   } else if (_isCmReadyToShow) {
