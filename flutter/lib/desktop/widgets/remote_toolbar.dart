@@ -3518,9 +3518,7 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           FilledButton(
-                            onPressed: saving || prompt.text.trim().isEmpty
-                                ? null
-                                : () async {
+                            onPressed: saving ? null : () async {
                                     update(() => saving = true);
                                     bool success;
                                     try {
