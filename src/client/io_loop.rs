@@ -2041,7 +2041,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     #[cfg(windows)]
                     Some(misc::Union::MiuOverlaySettings(settings)) => {
-                        self.handler.set_miu_overlay_settings(&settings);
+                        self.handler.ui_handler.set_miu_overlay_settings(&settings);
                     }
                     Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
