@@ -96,11 +96,17 @@ class _DesktopServerPageState extends State<DesktopServerPage>
       child: Consumer<ServerModel>(
         builder: (context, serverModel, child) {
           final petClient = serverModel.miuPetClient;
-          if (isWindows && appName == 'MiuAI' && petClient != null) {
+          if (isWindows && appName == 'MiuAI' &&
+              serverModel.miuPetShouldShow) {
             return MiuPetHost(
-              key: ValueKey('${petClient.peerId}:${petClient.id}'),
+              key: ValueKey(petClient == null
+                  ? 'offline'
+                  : '${petClient.peerId}:${petClient.id}'),
               chatModel: gFFI.chatModel,
-              keyForPeer: MessageKey(petClient.peerId, petClient.id),
+              keyForPeer: petClient == null
+                  ? MessageKey('', -2)
+                  : MessageKey(petClient.peerId, petClient.id),
+              chatAvailable: petClient != null,
               onExpanded: resizeMiuPetWindow,
             );
           }

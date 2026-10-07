@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +22,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
+import '../widgets/miu_image_transfer.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
 import 'macos_full_screen_focus_recovery.dart';
@@ -132,6 +135,8 @@ class _RemotePageState extends State<RemotePage>
   Worker? _waylandKeyboardModeWorker;
   bool _waylandKeyboardModeNormalized = false;
   bool _waylandKeyboardModeNormalizing = false;
+  bool _miuDragHover = false;
+  bool _miuImageSending = false;
 
   SessionID get sessionId => _ffi.sessionId;
 
@@ -698,6 +703,31 @@ class _RemotePageState extends State<RemotePage>
         ),
       );
 
+  Future<void> _sendMiuDroppedImage(File file) async {
+    if (_miuImageSending) return;
+    _miuImageSending = true;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('正在发送图片到 B 机…'),
+      duration: Duration(minutes: 20),
+    ));
+    try {
+      await sendAndOpenMiuImage(controller: _ffi, source: file);
+      if (mounted) {
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+            const SnackBar(content: Text('图片已发送，B 机已打开')));
+      }
+    } catch (error) {
+      if (mounted) {
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(content: Text('图片发送失败：$error')));
+      }
+    } finally {
+      _miuImageSending = false;
+    }
+  }
+
   Widget buildBody(BuildContext context) {
     remoteToolbar(BuildContext context) => RemoteToolbar(
           id: widget.id,
@@ -717,6 +747,33 @@ class _RemotePageState extends State<RemotePage>
           },
           setRemoteState: setState,
         );
+
+    Widget remoteImage() {
+      final image = getBodyForDesktop(context);
+      if (!isWindows || appName != 'MiuAI') return image;
+      return DropTarget(
+        onDragEntered: (_) => setState(() => _miuDragHover = true),
+        onDragExited: (_) => setState(() => _miuDragHover = false),
+        onDragDone: (details) {
+          setState(() => _miuDragHover = false);
+          if (details.files.isNotEmpty) {
+            unawaited(_sendMiuDroppedImage(File(details.files.first.path)));
+          }
+        },
+        child: Stack(fit: StackFit.expand, children: [
+          image,
+          if (_miuDragHover)
+            IgnorePointer(
+              child: Container(
+                color: const Color(0x806276D8),
+                alignment: Alignment.center,
+                child: const Text('松开以发送图片到 B 机并打开',
+                    style: TextStyle(color: Colors.white, fontSize: 20)),
+              ),
+            ),
+        ]),
+      );
+    }
 
     bodyWidget() {
       return Stack(
@@ -746,7 +803,7 @@ class _RemotePageState extends State<RemotePage>
                     }
                   },
                   inputModel: _ffi.inputModel,
-                  child: getBodyForDesktop(context))),
+                   child: remoteImage())),
           Stack(
             children: [
               _ffi.ffiModel.pi.isSet.isTrue &&

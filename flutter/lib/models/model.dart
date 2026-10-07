@@ -380,6 +380,8 @@ class FfiModel with ChangeNotifier {
           miuPeerAuthenticated = true;
           notifyListeners();
           bind.sessionQueryMiuOverlaySettings(sessionId: sessionId);
+          parent.target?.chatModel.refreshMiuPetVisible();
+          parent.target?.chatModel.refreshMiuPetAiSettings();
         }
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
@@ -392,6 +394,7 @@ class FfiModel with ChangeNotifier {
         if (isWindows && appName == 'MiuAI' && !isWeb) {
           miuPeerAuthenticated = false;
           miuOverlayEnabled = null;
+          parent.target?.chatModel.resetMiuControlState();
           notifyListeners();
         }
       } else if (name == 'switch_display') {
@@ -4452,6 +4455,7 @@ class FFI {
     if (isWeb) {
       platformFFI.clearVideoFrameCallback();
     }
+    chatModel.resetMiuControlState();
     chatModel.close();
     // Close all terminal models
     for (final model in _terminalModels.values) {

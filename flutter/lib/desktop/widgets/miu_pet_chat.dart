@@ -1,20 +1,38 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' hide Size;
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:image/image.dart' as img;
 import 'package:window_manager/window_manager.dart';
+import 'package:win32/win32.dart' as win32;
+import 'miu_ai_chat.dart';
 
 import 'miu_glass.dart';
 
 const _imagePrefix = 'miu:image/jpeg;base64,';
 const _maxImageBytes = 64 * 1024;
+
+Duration? _computerIdleTime() {
+  if (!Platform.isWindows) return null;
+  final lastInput = calloc<win32.LASTINPUTINFO>();
+  try {
+    lastInput.ref.cbSize = sizeOf<win32.LASTINPUTINFO>();
+    if (win32.GetLastInputInfo(lastInput) == 0) return null;
+    return Duration(milliseconds:
+        (win32.GetTickCount() - lastInput.ref.dwTime) & 0xffffffff);
+  } finally {
+    calloc.free(lastInput);
+  }
+}
 
 Uint8List? _imageBytes(String text) {
   if (!text.startsWith(_imagePrefix) ||
@@ -250,6 +268,106 @@ class _MiuChatViewState extends State<MiuChatView> {
     }
   }
 
+  Future<void> _openImage(Uint8List bytes) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        String? saveStatus;
+        bool saveSucceeded = false;
+        return StatefulBuilder(builder: (dialogContext, updateDialog) {
+          final size = MediaQuery.sizeOf(dialogContext);
+          return Dialog(
+            insetPadding: const EdgeInsets.all(12),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22)),
+            child: SizedBox(
+              width: math.min(680, size.width - 24),
+              height: math.min(680, size.height - 24),
+              child: Column(children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 4, 4),
+                  child: Row(children: [
+                    const Expanded(
+                      child: Text('查看图片',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ]),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 5,
+                      child: Center(
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      ),
+                    ),
+                  ),
+                ),
+                if (saveStatus != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Text(saveStatus!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: saveSucceeded
+                                ? const Color(0xFF16765B)
+                                : const Color(0xFFD94A61))),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(children: [
+                    const Expanded(
+                      child: Text('双指或滚轮缩放',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                    TextButton.icon(
+                      onPressed: () async {
+                        try {
+                          final path = await FilePicker.platform.saveFile(
+                            dialogTitle: '保存聊天图片',
+                            fileName:
+                                'MiuAI-${DateTime.now().millisecondsSinceEpoch}.jpg',
+                            type: FileType.custom,
+                            allowedExtensions: ['jpg'],
+                          );
+                          if (path == null) return;
+                          await File(path).writeAsBytes(bytes, flush: true);
+                          if (dialogContext.mounted) {
+                            updateDialog(() {
+                              saveStatus = '已保存到 $path';
+                              saveSucceeded = true;
+                            });
+                          }
+                        } catch (error) {
+                          if (dialogContext.mounted) {
+                            updateDialog(() {
+                              saveStatus = '保存失败：$error';
+                              saveSucceeded = false;
+                            });
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text('保存到本机'),
+                    ),
+                  ]),
+                ),
+              ]),
+            ),
+          );
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -289,7 +407,7 @@ class _MiuChatViewState extends State<MiuChatView> {
                             borderRadius: BorderRadius.circular(17),
                           ),
                           child: bytes == null
-                              ? Text(
+                              ? SelectableText(
                                   message.text.startsWith(_imagePrefix)
                                       ? '无法显示这张图片'
                                       : message.text,
@@ -297,13 +415,21 @@ class _MiuChatViewState extends State<MiuChatView> {
                                       color: own
                                           ? Colors.white
                                           : const Color(0xFF263252)))
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(13),
-                                  child: Image.memory(bytes,
-                                      width: 220,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, __, ___) =>
-                                          const Text('图片无法显示'))),
+                              : Tooltip(
+                                  message: '点击查看或保存图片',
+                                  child: InkWell(
+                                    onTap: () => _openImage(bytes),
+                                    borderRadius: BorderRadius.circular(13),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(13),
+                                      child: Image.memory(bytes,
+                                          width: 220,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Text('图片无法显示')),
+                                    ),
+                                  ),
+                                ),
                         ),
                       );
                     },
@@ -367,11 +493,13 @@ class MiuPetHost extends StatefulWidget {
     required this.chatModel,
     required this.keyForPeer,
     required this.onExpanded,
+    this.chatAvailable = true,
   }) : super(key: key);
 
   final ChatModel chatModel;
   final MessageKey keyForPeer;
   final Future<void> Function(bool) onExpanded;
+  final bool chatAvailable;
 
   @override
   State<MiuPetHost> createState() => _MiuPetHostState();
@@ -384,18 +512,46 @@ class _MiuPetHostState extends State<MiuPetHost>
     duration: const Duration(milliseconds: 3600),
   )..repeat();
   bool _expanded = false;
+  bool _showHumanChat = false;
+  bool _hovered = false;
   int _mood = 0;
   int _lastUnread = 0;
+  bool _wasAiBusy = false;
+  DateTime _lastActivity = DateTime.now();
   Timer? _reactionTimer;
   Timer? _idleTimer;
 
   @override
   void initState() {
     super.initState();
-    _lastUnread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
+    _lastUnread = widget.chatAvailable
+        ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
     widget.chatModel.addListener(_onChatChanged);
-    _idleTimer = Timer.periodic(const Duration(seconds: 7), (_) {
-      if (mounted && !_expanded) setState(() => _mood = (_mood + 1) % 10);
+    _wasAiBusy = MiuAiConversation.instance.busy;
+    MiuAiConversation.instance.addListener(_onAiChanged);
+    _idleTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || _expanded || _hovered ||
+          (_reactionTimer?.isActive ?? false)) return;
+      final unread = widget.chatAvailable
+          ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
+      final quiet = DateTime.now().difference(_lastActivity);
+      final computerIdle = _computerIdleTime();
+      var mood = 0;
+      if (MiuAiConversation.instance.busy) {
+        mood = 3;
+      } else if (unread > 0) {
+        mood = quiet > const Duration(seconds: 60)
+            ? 9
+            : unread >= 3 ? 8 : 3;
+      } else if (computerIdle != null &&
+          computerIdle > const Duration(minutes: 10)) {
+        mood = 4;
+      } else if (computerIdle != null &&
+          computerIdle < const Duration(seconds: 10) &&
+          DateTime.now().second % 15 < 3) {
+        mood = 1;
+      }
+      if (mood != _mood) setState(() => _mood = mood);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onExpanded(false);
@@ -409,26 +565,48 @@ class _MiuPetHostState extends State<MiuPetHost>
       oldWidget.chatModel.removeListener(_onChatChanged);
       widget.chatModel.addListener(_onChatChanged);
     }
-    _lastUnread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
+    _lastUnread = widget.chatAvailable
+        ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
   }
 
   void _onChatChanged() {
-    final unread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
+    final unread = widget.chatAvailable
+        ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
     if (unread > _lastUnread) {
-      _reactionTimer?.cancel();
-      setState(() => _mood = 5);
-      _reactionTimer = Timer(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _mood = 0);
-      });
+      _react(5, const Duration(seconds: 3));
     } else if (unread != _lastUnread) {
+      _lastActivity = DateTime.now();
       setState(() {});
     }
     _lastUnread = unread;
   }
 
+  void _onAiChanged() {
+    final busy = MiuAiConversation.instance.busy;
+    if (busy && !_wasAiBusy) {
+      _react(3, const Duration(seconds: 2));
+    } else if (!busy && _wasAiBusy) {
+      _react(7, const Duration(seconds: 3));
+    }
+    _wasAiBusy = busy;
+  }
+
+  void _react(int mood, Duration duration) {
+    _reactionTimer?.cancel();
+    _lastActivity = DateTime.now();
+    setState(() => _mood = mood);
+    _reactionTimer = Timer(duration, () {
+      if (!mounted) return;
+      final unread = widget.chatAvailable
+          ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
+      setState(() => _mood = _hovered ? 2 : unread > 0 ? 3 : 0);
+    });
+  }
+
   @override
   void dispose() {
     widget.chatModel.removeListener(_onChatChanged);
+    MiuAiConversation.instance.removeListener(_onAiChanged);
     _reactionTimer?.cancel();
     _idleTimer?.cancel();
     _motion.dispose();
@@ -436,16 +614,23 @@ class _MiuPetHostState extends State<MiuPetHost>
   }
 
   void _toggleChat() {
+    _reactionTimer?.cancel();
+    _lastActivity = DateTime.now();
     setState(() {
       _expanded = !_expanded;
-      _mood = (_mood + 1) % 10;
+      if (_expanded) {
+        _showHumanChat = widget.chatAvailable &&
+            widget.chatModel.miuUnreadCount(widget.keyForPeer) > 0;
+      }
+      _mood = _expanded ? 1 : 0;
     });
     widget.onExpanded(_expanded);
   }
 
   @override
   Widget build(BuildContext context) {
-    final unread = widget.chatModel.miuUnreadCount(widget.keyForPeer);
+    final unread = widget.chatAvailable
+        ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -462,23 +647,45 @@ class _MiuPetHostState extends State<MiuPetHost>
                 child: Column(children: [
                   GestureDetector(
                     onPanStart: (_) => windowManager.startDragging(),
-                    child: const Padding(
-                      padding: EdgeInsets.fromLTRB(18, 12, 18, 5),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 6, 9, 2),
                       child: Row(children: [
-                        Icon(Icons.chat_bubble_outline_rounded,
+                        const Icon(Icons.chat_bubble_outline_rounded,
                             size: 16, color: Color(0xFF657BE9)),
-                        SizedBox(width: 7),
-                        Text('Miu 消息',
+                        const SizedBox(width: 7),
+                        const Expanded(child: Text('Miu',
                             style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF31427B))),
+                                color: Color(0xFF31427B)))),
+                        if (widget.chatAvailable) ...[
+                          TextButton(
+                            onPressed: () => setState(() => _showHumanChat = false),
+                            child: Text('和 Miu 聊', style: TextStyle(
+                              color: _showHumanChat ? const Color(0xFF7380A0) : const Color(0xFF4569D9))),
+                          ),
+                          TextButton(
+                            onPressed: () => setState(() => _showHumanChat = true),
+                            child: Text('A 消息', style: TextStyle(
+                              color: _showHumanChat ? const Color(0xFF4569D9) : const Color(0xFF7380A0))),
+                          ),
+                        ],
+                        IconButton(
+                          tooltip: '收起消息',
+                          iconSize: 18,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _toggleChat,
+                          icon: const Icon(Icons.close_rounded,
+                              color: Color(0xFF31427B)),
+                        ),
                       ]),
                     ),
                   ),
                   Expanded(
-                    child: MiuChatView(
-                        chatModel: widget.chatModel,
-                        keyForPeer: widget.keyForPeer),
+                    child: _showHumanChat && widget.chatAvailable
+                        ? MiuChatView(
+                            chatModel: widget.chatModel,
+                            keyForPeer: widget.keyForPeer)
+                        : const MiuAiChatView(),
                   ),
                 ]),
               ),
@@ -489,55 +696,124 @@ class _MiuPetHostState extends State<MiuPetHost>
             width: 196,
             height: 192,
             child: Tooltip(
-              message: '点我聊天 · 拖动可移动',
+              message: '点我聊天 · 双击爱心 · 长按撒娇 · 拖动可移动',
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onPanStart: (_) => windowManager.startDragging(),
                 onTap: _toggleChat,
+                onDoubleTap: () => _react(6, const Duration(seconds: 2)),
+                onLongPress: () => _react(7, const Duration(seconds: 2)),
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
-                  child: AnimatedBuilder(
-                    animation: _motion,
-                    builder: (_, __) {
-                      final phase = _motion.value * math.pi * 2;
-                      final lively = _mood == 0 || _mood == 5 || _mood == 7;
-                      final lift = lively
-                          ? -7 * math.sin(phase).abs()
-                          : -4 * math.sin(phase);
-                      final sway = 2.5 * math.sin(phase + _mood * 0.6);
-                      final tilt = (_mood == 2 ? 0.06 : _mood == 8 ? -0.06 : 0.0) +
-                          0.035 * math.sin(phase);
-                      final scale = 1 + 0.025 * math.sin(phase - 0.5);
-                      final blink = (1.0 -
-                              (_motion.value - 0.82).abs() / 0.035)
-                          .clamp(0.0, 1.0)
-                          .toDouble();
-                      return Transform.translate(
-                        offset: Offset(sway, lift),
-                        child: Transform.rotate(
-                          angle: tilt,
-                          child: Transform.scale(
-                            scale: scale,
-                            child: Stack(children: [
-                              _MiuPetFace(mood: _mood, blink: blink),
-                              if (unread > 0)
-                                const Positioned(
-                                  right: 20,
-                                  top: 22,
-                                  child: CircleAvatar(
-                                    radius: 5,
-                                    backgroundColor: Color(0xFFEF709C),
-                                  ),
-                                ),
-                            ]),
+                  onEnter: (_) {
+                    _lastActivity = DateTime.now();
+                    setState(() {
+                      _hovered = true;
+                      if (!(_reactionTimer?.isActive ?? false)) _mood = 2;
+                    });
+                  },
+                  onExit: (_) {
+                    _lastActivity = DateTime.now();
+                    setState(() {
+                      _hovered = false;
+                      if (!(_reactionTimer?.isActive ?? false)) {
+                        _mood = widget.chatAvailable &&
+                                widget.chatModel.miuUnreadCount(widget.keyForPeer) > 0
+                            ? 3 : 0;
+                      }
+                    });
+                  },
+                  child: AnimatedScale(
+                    scale: _hovered ? 1.045 : 1,
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedBuilder(
+                      animation: _motion,
+                      builder: (_, __) {
+                        final phase = _motion.value * math.pi * 2;
+                        final lift = _mood == 7
+                            ? -5 * (1 - math.cos(phase * 2))
+                            : -3.5 * (1 - math.cos(phase));
+                        final sway = 2.5 * math.sin(phase);
+                        final tilt = (_mood == 2 ? 0.04 : _mood == 8 ? -0.04 : 0.0) +
+                            0.027 * math.sin(phase);
+                        final scale = 1 + 0.02 * math.sin(phase - 0.5);
+                        double blinkAt(double center, double width) =>
+                            Curves.easeInOut.transform(
+                                (1 - (_motion.value - center).abs() / width)
+                                    .clamp(0.0, 1.0));
+                        final blink = math.max(
+                            blinkAt(0.24, 0.026), blinkAt(0.78, 0.036));
+                        return Transform.translate(
+                          offset: Offset(sway, lift),
+                          child: Transform.rotate(
+                            angle: tilt,
+                            child: Transform.scale(
+                              scale: scale,
+                              child: _MiuPetFace(
+                                mood: _mood,
+                                blink: blink,
+                                gaze: 1.6 * math.sin(phase),
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
             ),
           ),
+          if (!_expanded)
+            Positioned(
+              left: 8,
+              right: 8,
+              top: 3,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: unread > 0 ? 1 : 0,
+                  duration: const Duration(milliseconds: 280),
+                  child: AnimatedSlide(
+                    offset: unread > 0 ? Offset.zero : const Offset(0, -0.35),
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedBuilder(
+                      animation: _motion,
+                      builder: (_, child) => Transform.scale(
+                        scale: 1 + 0.035 * (1 + math.sin(_motion.value * math.pi * 2)),
+                        child: child,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [
+                            Color(0xFF4D8FFB), Color(0xFF766AF2),
+                          ]),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: Colors.white, width: 1.4),
+                          boxShadow: const [BoxShadow(
+                            color: Color(0x665373E8), blurRadius: 16, offset: Offset(0, 5),
+                          )],
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.mark_chat_unread_rounded,
+                              size: 16, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Flexible(child: Text(
+                            unread > 1 ? '${unread > 99 ? '99+' : unread} 条新消息' : '收到新消息',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white,
+                                fontSize: 12, fontWeight: FontWeight.w700),
+                          )),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -545,10 +821,11 @@ class _MiuPetHostState extends State<MiuPetHost>
 }
 
 class _MiuPetFace extends StatelessWidget {
-  const _MiuPetFace({required this.mood, required this.blink});
+  const _MiuPetFace({required this.mood, required this.blink, required this.gaze});
 
   final int mood;
   final double blink;
+  final double gaze;
 
   @override
   Widget build(BuildContext context) {
@@ -559,12 +836,15 @@ class _MiuPetFace extends StatelessWidget {
         child: SizedBox.square(
           dimension: 178,
           child: Stack(fit: StackFit.expand, children: [
-            Image.asset('assets/miu_cat_head.png', filterQuality: FilterQuality.medium),
+            RepaintBoundary(child: Image.asset('assets/miu_cat_head.png',
+                filterQuality: FilterQuality.medium)),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
+              duration: const Duration(milliseconds: 420),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
               child: SizedBox.expand(
                 key: ValueKey(mood),
-                child: CustomPaint(painter: _MiuCatExpression(mood, blink)),
+                child: CustomPaint(painter: _MiuCatExpression(mood, blink, gaze)),
               ),
             ),
           ]),
@@ -575,10 +855,11 @@ class _MiuPetFace extends StatelessWidget {
 }
 
 class _MiuCatExpression extends CustomPainter {
-  const _MiuCatExpression(this.mood, this.blink);
+  const _MiuCatExpression(this.mood, this.blink, this.gaze);
 
   final int mood;
   final double blink;
+  final double gaze;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -610,20 +891,20 @@ class _MiuCatExpression extends CustomPainter {
               end: Alignment.bottomCenter,
               colors: [Color(0xFF12295D), Color(0xFF2059BC), Color(0xFF39C8F4)],
             ).createShader(area));
-      canvas.drawCircle(Offset(x + look, 69), 4,
+      canvas.drawCircle(Offset(x + look + gaze, 69), 4,
           Paint()..color = const Color(0xFF102D68));
-      canvas.drawCircle(Offset(x - 3 + look, 69), 2.6,
+      canvas.drawCircle(Offset(x - 3 + look + gaze, 69), 2.6,
           Paint()..color = Colors.white);
       canvas.drawCircle(Offset(x + 4, 79), 1.2,
           Paint()..color = Colors.white.withOpacity(0.9));
     }
 
-    eye(45, mood == 4 || mood == 7 || mood == 9,
+    eye(45, mood == 4 || mood == 7,
         look: mood == 2 ? 2 : mood == 6 ? -2 : 0);
-    eye(81, mood == 1 || mood == 4 || mood == 7 || mood == 9,
+    eye(81, mood == 1 || mood == 4 || mood == 7,
         look: mood == 6 ? -2 : mood == 8 ? 2 : 0);
 
-    if (mood == 3 || mood == 8) {
+    if (mood == 3 || mood == 8 || mood == 9) {
       canvas.drawPath(
           Path()
             ..moveTo(73, 57)
@@ -640,7 +921,13 @@ class _MiuCatExpression extends CustomPainter {
             ..moveTo(58, 98)
             ..quadraticBezierTo(63, 94, 68, 98),
           line..strokeWidth = 2);
-    } else if (mood == 4 || mood == 6 || mood == 9) {
+    } else if (mood == 9) {
+      canvas.drawPath(
+          Path()
+            ..moveTo(56, 100)
+            ..quadraticBezierTo(63, 91, 70, 100),
+          line..strokeWidth = 2.5);
+    } else if (mood == 4 || mood == 6) {
       canvas.drawPath(
           Path()
             ..moveTo(57, 94)
@@ -706,18 +993,16 @@ class _MiuCatExpression extends CustomPainter {
     } else if (mood == 9) {
       canvas.drawPath(
           Path()
-            ..moveTo(106, 40)
-            ..lineTo(106, 29)
-            ..lineTo(112, 27),
-          accent);
-      canvas.drawOval(
-          Rect.fromCenter(center: const Offset(103, 41), width: 5, height: 3),
-          accent..style = PaintingStyle.fill);
+            ..moveTo(90, 82)
+            ..quadraticBezierTo(95, 89, 90, 92)
+            ..quadraticBezierTo(86, 89, 90, 82),
+          Paint()..color = const Color(0xFF64CFFF));
     }
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(_MiuCatExpression oldDelegate) =>
-      mood != oldDelegate.mood || blink != oldDelegate.blink;
+      mood != oldDelegate.mood || blink != oldDelegate.blink ||
+      gaze != oldDelegate.gaze;
 }

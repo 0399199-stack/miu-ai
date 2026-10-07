@@ -31,23 +31,35 @@ class ServerModel with ChangeNotifier {
   bool _fileOk = false;
   bool _clipboardOk = false;
   bool _showElevation = false;
+  bool _miuPetEnabled = true;
+  bool get miuPetVisible => _miuPetEnabled;
+  bool get miuPetShouldShow =>
+      _miuQuietHost && _miuPetEnabled && !_showCmForClients;
+  void setMiuPetVisible(bool visible) {
+    if (!_miuQuietHost || _miuPetEnabled == visible) return;
+    _miuPetEnabled = visible;
+    unawaited(bind.mainSetOption(
+        key: 'miu-pet-visible', value: visible ? 'Y' : 'N'));
+    _showMiuPetOrHide();
+    notifyListeners();
+  }
   bool hideCm = false;
   bool get _miuQuietHost => isWindows && bind.mainGetAppNameSync() == 'MiuAI';
   bool get _showCmForClients => _miuQuietHost
       ? bind.mainGetOptionSync(key: kOptionApproveMode) == 'click' &&
           _clients.any((client) => !client.authorized && !client.disconnected)
       : !hideCm;
-  Client? get miuPetClient => _miuQuietHost && !_showCmForClients
+  Client? get miuPetClient => _miuQuietHost && _miuPetEnabled && !_showCmForClients
       ? _clients.firstWhereOrNull((client) =>
           client.authorized && !client.disconnected &&
           !client.isFileTransfer && !client.isViewCamera &&
           !client.isTerminal && client.portForward.isEmpty)
       : null;
   void _showMiuPetOrHide() {
-    if (miuPetClient == null) {
-      hideCmWindow();
-    } else {
+    if (miuPetShouldShow) {
       showMiuPetWindow();
+    } else {
+      hideCmWindow();
     }
   }
   int _connectStatus = 0; // Rendezvous Server status
@@ -149,6 +161,10 @@ class ServerModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ServerModel(this.parent) {
+    if (_miuQuietHost) {
+      _miuPetEnabled =
+          bind.mainGetOptionSync(key: 'miu-pet-visible') != 'N';
+    }
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
@@ -181,10 +197,15 @@ class ServerModel with ChangeNotifier {
           updateClientState(res);
         } else {
           if (_clients.isEmpty) {
-            hideCmWindow();
-            if (_zeroClientLengthCounter++ == 12) {
-              // 6 second
-              windowManager.close();
+            if (_miuQuietHost) {
+              _zeroClientLengthCounter = 0;
+              _showMiuPetOrHide();
+            } else {
+              hideCmWindow();
+              if (_zeroClientLengthCounter++ == 12) {
+                // 6 second
+                windowManager.close();
+              }
             }
           } else {
             _zeroClientLengthCounter = 0;
@@ -533,7 +554,11 @@ class ServerModel with ChangeNotifier {
     }
     if (desktopType == DesktopType.cm) {
       if (_clients.isEmpty) {
-        hideCmWindow();
+        if (_miuQuietHost) {
+          _showMiuPetOrHide();
+        } else {
+          hideCmWindow();
+        }
       } else if (_miuQuietHost && !_showCmForClients) {
         _showMiuPetOrHide();
       } else if (_showCmForClients) {
@@ -743,7 +768,11 @@ class ServerModel with ChangeNotifier {
       }
       if (desktopType == DesktopType.cm) {
         if (_clients.isEmpty) {
-          hideCmWindow();
+          if (_miuQuietHost) {
+            _showMiuPetOrHide();
+          } else {
+            hideCmWindow();
+          }
         } else if (_miuQuietHost && !_showCmForClients) {
           _showMiuPetOrHide();
         }

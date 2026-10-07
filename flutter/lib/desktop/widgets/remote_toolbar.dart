@@ -393,6 +393,54 @@ class _ToolbarTheme {
   }
 }
 
+Widget _toolbarButtonFace({
+  required bool miu,
+  required bool hovered,
+  required bool enabled,
+  required double width,
+  required double height,
+  required Color color,
+  required Color hoverColor,
+  required Widget icon,
+}) {
+  if (!miu) {
+    return Ink(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(_ToolbarTheme.iconRadius),
+        color: hovered ? hoverColor : color,
+      ),
+      child: icon,
+    );
+  }
+  return AnimatedScale(
+    scale: hovered && enabled ? 1.035 : 1,
+    duration: const Duration(milliseconds: 150),
+    curve: Curves.easeOutCubic,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutCubic,
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: (hovered ? hoverColor : color)
+            .withOpacity(enabled ? (hovered ? 0.94 : 0.86) : 0.5),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+            color: Colors.white.withOpacity(hovered ? 0.68 : 0.36)),
+        boxShadow: hovered && enabled
+            ? [
+                BoxShadow(
+                    color: color.withOpacity(0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4)),
+              ]
+            : null,
+      ),
+      child: Center(child: icon),
+    ),
+  );
+}
+
 typedef DismissFunc = void Function();
 
 class RemoteMenuEntry {
@@ -550,6 +598,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     _imagePanel = null;
     entry?.remove();
     entry?.dispose();
+  }
+
+  void _openFileTransfer(BuildContext context) {
+    connect(context, widget.ffi.id,
+        isFileTransfer: true,
+        connToken: bind.sessionGetConnToken(sessionId: widget.ffi.sessionId));
   }
 
   void _minimize() async =>
@@ -909,13 +963,13 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       if (!isWeb) toolbarItems.add(_GlowColorMenu(ffi: widget.ffi));
       if (_isMiuToolbar) toolbarItems.add(_MiuOverlayTextMenu(ffi: widget.ffi));
       if (_isMiuToolbar) {
-        toolbarItems.add(_IconMenuButton(
-          icon: AnimatedBuilder(
-              animation: widget.ffi.chatModel,
-              builder: (context, _) {
-                final unread = widget.ffi.chatModel.miuUnreadCount(
-                    MessageKey(widget.ffi.id, ChatModel.clientModeID));
-                return Row(
+        toolbarItems.add(AnimatedBuilder(
+            animation: widget.ffi.chatModel,
+            builder: (context, _) {
+              final unread = widget.ffi.chatModel.miuUnreadCount(
+                  MessageKey(widget.ffi.id, ChatModel.clientModeID));
+              return _IconMenuButton(
+                icon: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.chat_bubble_outline_rounded,
@@ -924,19 +978,31 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
                     const Text('消息',
                         style: TextStyle(fontSize: 12, color: Colors.white)),
                     if (unread > 0) ...[
-                      const SizedBox(width: 4),
-                      const CircleAvatar(
-                          radius: 3, backgroundColor: Color(0xFFFF748F)),
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF5D73),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(unread > 9 ? '9+' : '$unread',
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white)),
+                      ),
                     ],
                   ],
-                );
-              }),
-          width: 76,
-          tooltip: '与 B 机互发消息和图片',
-          color: _ToolbarTheme.blueColor,
-          hoverColor: _ToolbarTheme.hoverBlueColor,
-          onPressed: () => _showChatPanel(context),
-        ));
+                ),
+                width: unread > 0 ? 88 : 76,
+                tooltip: unread > 0 ? '$unread 条未读消息' : '与 B 机互发消息和图片',
+                color: _ToolbarTheme.blueColor,
+                hoverColor: _ToolbarTheme.hoverBlueColor,
+                onPressed: () => _showChatPanel(context),
+              );
+            }));
+        toolbarItems.add(_MiuPetButton(ffi: widget.ffi));
+        toolbarItems.add(_MiuPetAiSettingsButton(ffi: widget.ffi));
         toolbarItems.add(_IconMenuButton(
           icon: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -952,6 +1018,25 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           color: _ToolbarTheme.blueColor,
           hoverColor: _ToolbarTheme.hoverBlueColor,
           onPressed: () => _showImagePanel(context),
+        ));
+        final canTransfer = !widget.ffi.closed &&
+            widget.ffi.ffiModel.miuPeerAuthenticated &&
+            widget.ffi.ffiModel.permissions['file'] != false;
+        toolbarItems.add(_IconMenuButton(
+          icon: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.folder_copy_outlined, size: 17, color: Colors.white),
+              SizedBox(width: 5),
+              Text('传文件',
+                  style: TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+          width: 84,
+          tooltip: canTransfer ? '打开与 B 机的文件传输' : 'B 机未授权文件传输',
+          color: _ToolbarTheme.blueColor,
+          hoverColor: _ToolbarTheme.hoverBlueColor,
+          onPressed: canTransfer ? () => _openFileTransfer(context) : null,
         ));
       }
       if (!isWeb && widget.ffi.ffiModel.isPeerWindows &&
@@ -977,7 +1062,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius =
-        BorderRadius.circular(_isMiuToolbar ? 18.0 : 4.0);
+        BorderRadius.circular(_isMiuToolbar ? 22.0 : 4.0);
     // innerAxis: how the toolbar icons themselves flow.
     // outerAxis: how the toolbar block and the handle stack against each other
     // (perpendicular to the dock edge, so the handle hangs off the interior face).
@@ -991,14 +1076,20 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       mainAxisSize: MainAxisSize.min,
       children: [spacer, ...toolbarItems, spacer],
     );
-    final toolbarContent = SingleChildScrollView(
-      scrollDirection: innerAxis,
-      child: Theme(
-        data: themeData(),
-        child: _isMiuToolbar
-            ? toolbarItemsRow
-            : _ToolbarTheme.borderWrapper(
-                context, toolbarItemsRow, toolbarBorderRadius),
+    final toolbarContent = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 20,
+        maxHeight: MediaQuery.sizeOf(context).height - 48,
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: innerAxis,
+        child: Theme(
+          data: themeData(),
+          child: _isMiuToolbar
+              ? toolbarItemsRow
+              : _ToolbarTheme.borderWrapper(
+                  context, toolbarItemsRow, toolbarBorderRadius),
+        ),
       ),
     );
     final toolbarMaterial = _isMiuToolbar
@@ -1007,21 +1098,29 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
               borderRadius: toolbarBorderRadius,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF111B3B).withOpacity(0.18),
-                  blurRadius: 22,
-                  offset: const Offset(0, 8),
+                  color: const Color(0xFF142851).withOpacity(0.22),
+                  blurRadius: 30,
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
             child: ClipRRect(
               borderRadius: toolbarBorderRadius,
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFF).withOpacity(0.78),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.78),
+                        const Color(0xFFEAF1FF).withOpacity(0.55),
+                      ],
+                    ),
                     borderRadius: toolbarBorderRadius,
-                    border: Border.all(color: Colors.white.withOpacity(0.72)),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.86), width: 1.2),
                   ),
                   child: toolbarContent,
                 ),
@@ -3220,6 +3319,283 @@ class _MiuTasksMenu extends StatelessWidget {
   }
 }
 
+class _MiuPetButton extends StatefulWidget {
+  final FFI ffi;
+
+  const _MiuPetButton({required this.ffi});
+
+  @override
+  State<_MiuPetButton> createState() => _MiuPetButtonState();
+}
+
+class _MiuPetButtonState extends State<_MiuPetButton> {
+  bool _pending = false;
+
+  Future<void> _toggle(bool visible) async {
+    setState(() => _pending = true);
+    bool success;
+    try {
+      success = await widget.ffi.chatModel.setMiuPetVisible(!visible);
+    } catch (_) {
+      success = false;
+    }
+    if (!mounted) return;
+    setState(() => _pending = false);
+    if (!success) showToast('B 机宠物切换失败');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.ffi.chatModel,
+      builder: (context, _) {
+        final visible = widget.ffi.chatModel.miuPetVisible;
+        final ready = widget.ffi.ffiModel.miuPeerAuthenticated &&
+            widget.ffi.ffiModel.isPeerWindows &&
+            !widget.ffi.closed &&
+            visible != null &&
+            !_pending;
+        final statusColor = visible == null
+            ? const Color(0xFFFFC857)
+            : visible
+                ? const Color(0xFF43DF8A)
+                : const Color(0xFFBEC5D4);
+        return Semantics(
+          label: 'B 机宠物',
+          toggled: visible == true,
+          child: _IconMenuButton(
+            icon: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.pets_rounded, size: 17, color: Colors.white),
+                const SizedBox(width: 5),
+                const Text('宠物',
+                    style: TextStyle(fontSize: 12, color: Colors.white)),
+                const SizedBox(width: 5),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    boxShadow: visible == true
+                        ? [BoxShadow(color: statusColor, blurRadius: 6)]
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            width: 88,
+            tooltip: visible == null
+                ? '等待 B 机回报宠物状态'
+                : visible
+                    ? '关闭 B 机宠物'
+                    : '开启 B 机宠物',
+            color: visible == true
+                ? _ToolbarTheme.blueColor
+                : _ToolbarTheme.inactiveColor,
+            hoverColor: visible == true
+                ? _ToolbarTheme.hoverBlueColor
+                : _ToolbarTheme.hoverInactiveColor,
+            onPressed: ready ? () => _toggle(visible) : null,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MiuPetAiSettingsButton extends StatelessWidget {
+  final FFI ffi;
+
+  const _MiuPetAiSettingsButton({required this.ffi});
+
+  Future<void> _showSettings(BuildContext context) async {
+    final chat = ffi.chatModel;
+    if (chat.miuPetAiEnabled == null ||
+        chat.miuPetPersona == null ||
+        chat.miuPetReplyLength == null) return;
+    var enabled = chat.miuPetAiEnabled!;
+    var replyLength = chat.miuPetReplyLength!;
+    var saving = false;
+    final prompt = TextEditingController(text: chat.miuPetPersona);
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.24),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, update) => material.Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(26),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+              child: Container(
+                width: (MediaQuery.sizeOf(dialogContext).width - 32)
+                    .clamp(280.0, 480.0),
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(dialogContext).height - 40),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [
+                    Colors.white.withOpacity(0.92),
+                    const Color(0xFFEAF1FF).withOpacity(0.78),
+                  ]),
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: Colors.white.withOpacity(0.88)),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('宠物智能回复',
+                          style: TextStyle(
+                              fontSize: 21, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      const Text('Key 需在 B 机宠物窗口输入；其他设置保存在 B 机，重连后重新读取。',
+                          style: TextStyle(color: Color(0xFF596579))),
+                      const SizedBox(height: 20),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('AI 自动回复'),
+                        subtitle: const Text('只回复 B 用户在宠物窗口发送的文字'),
+                        value: enabled,
+                        onChanged: saving
+                            ? null
+                            : (value) => update(() => enabled = value),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('人设提示词',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: prompt,
+                        enabled: !saving,
+                        minLines: 3,
+                        maxLines: 5,
+                        maxLength: 500,
+                        onChanged: (_) => update(() {}),
+                        decoration: InputDecoration(
+                          hintText: '描述宠物的性格、语气和回复习惯',
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.7),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('回复长度',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final (value, label) in [
+                            (1, '一句话'),
+                            (2, '两句话'),
+                            (3, '稍详细'),
+                          ])
+                            ChoiceChip(
+                              label: Text(label),
+                              selected: replyLength == value,
+                              onSelected: saving
+                                  ? null
+                                  : (_) => update(() => replyLength = value),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: saving
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(),
+                            child: const Text('取消'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: saving || prompt.text.trim().isEmpty
+                                ? null
+                                : () async {
+                                    update(() => saving = true);
+                                    bool success;
+                                    try {
+                                      success = await chat.setMiuPetAiSettings(
+                                        enabled: enabled,
+                                        persona: prompt.text.trim(),
+                                        replyLength: replyLength,
+                                      );
+                                    } catch (_) {
+                                      success = false;
+                                    }
+                                    if (!dialogContext.mounted) return;
+                                    if (success) {
+                                      Navigator.of(dialogContext).pop();
+                                    } else {
+                                      update(() => saving = false);
+                                      showToast('B 机未保存宠物设置');
+                                    }
+                                  },
+                            child: Text(saving ? '保存中…' : '保存到 B 机'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    prompt.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: ffi.chatModel,
+      builder: (context, _) {
+        final enabled = ffi.chatModel.miuPetAiEnabled;
+        final ready = ffi.ffiModel.miuPeerAuthenticated &&
+            ffi.ffiModel.isPeerWindows &&
+            enabled != null &&
+            ffi.chatModel.miuPetPersona != null &&
+            ffi.chatModel.miuPetReplyLength != null;
+        return _IconMenuButton(
+          icon: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.tune_rounded, size: 19, color: Colors.white),
+              if (enabled == true)
+                const Positioned(
+                  right: 4,
+                  top: 4,
+                  child: CircleAvatar(
+                      radius: 3, backgroundColor: Color(0xFF43DF8A)),
+                ),
+            ],
+          ),
+          width: 38,
+          tooltip: enabled == null
+              ? '等待 B 机回报 AI 设置'
+              : enabled
+                  ? '宠物 AI 回复已开启 · 设置'
+                  : '宠物 AI 回复已关闭 · 设置',
+          color: _ToolbarTheme.inactiveColor,
+          hoverColor: _ToolbarTheme.hoverInactiveColor,
+          onPressed: ready ? () => _showSettings(context) : null,
+        );
+      },
+    );
+  }
+}
+
 class _KeyboardMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
@@ -3598,19 +3974,16 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
             message: translate(widget.tooltip),
             child: Material(
                 type: MaterialType.transparency,
-                child: Ink(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(
-                          miu ? 12 : _ToolbarTheme.iconRadius),
-                      color: hover ? widget.hoverColor : widget.color,
-                    ),
-                    child: miu
-                        ? SizedBox(
-                            width: buttonWidth,
-                            height: buttonSize,
-                            child: Center(child: icon),
-                          )
-                        : icon)),
+                child: _toolbarButtonFace(
+                  miu: miu,
+                  hovered: hover,
+                  enabled: widget.onPressed != null,
+                  width: buttonWidth,
+                  height: buttonSize,
+                  color: widget.color,
+                  hoverColor: widget.hoverColor,
+                  icon: icon,
+                )),
           )),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? (miu ? 3 : _ToolbarTheme.buttonHMargin),
@@ -3690,19 +4063,16 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                 message: translate(widget.tooltip),
                 child: Material(
                     type: MaterialType.transparency,
-                    child: Ink(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(
-                              miu ? 12 : _ToolbarTheme.iconRadius),
-                          color: hover ? widget.hoverColor : widget.color,
-                        ),
-                        child: miu
-                            ? SizedBox(
-                                width: buttonWidth,
-                                height: buttonSize,
-                                child: Center(child: icon),
-                              )
-                            : icon))),
+                    child: _toolbarButtonFace(
+                      miu: miu,
+                      hovered: hover,
+                      enabled: true,
+                      width: buttonWidth,
+                      height: buttonSize,
+                      color: widget.color,
+                      hoverColor: widget.hoverColor,
+                      icon: icon,
+                    ))),
             menuChildren: widget
                 .menuChildrenGetter(this)
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))

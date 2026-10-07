@@ -137,6 +137,10 @@
 				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!App.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER_INNER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
 			</Component>
+			<Component Id="App.StartupFolder.ShortcutMiuPet" Guid="0D985B26-5F93-4E82-AF3B-7461A4D6F0BB" Condition="ProductName = &quot;MiuAI&quot; AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)">
+				<Shortcut Id="App.StartupFolder.ShortcutMiuPet" Name="Miu AI Pet" Description="Miu AI desktop pet" Target="[!App.exe]" Arguments="--cm" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER_INNER" />
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutMiuPet" Type="string" Value="1" KeyPath="yes" />
+			</Component>
 		</StandardDirectory>
 
 		<!--<DirectoryRef Id="INSTALLFOLDER_INNER">
@@ -152,6 +156,7 @@
 			<ComponentRef Id="App.StartMenu.Shortcut" />
 			<ComponentRef Id="App.StartMenu.ShortcutUninstall" />
 			<ComponentRef Id="App.StartupFolder.ShortcutTray" />
+			<ComponentRef Id="App.StartupFolder.ShortcutMiuPet" />
 
 			<!--$AutoComonentStart$-->
 			<!--$AutoComponentEnd$-->
