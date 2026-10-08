@@ -382,6 +382,7 @@ class FfiModel with ChangeNotifier {
           bind.sessionQueryMiuOverlaySettings(sessionId: sessionId);
           parent.target?.chatModel.refreshMiuPetVisible();
           parent.target?.chatModel.refreshMiuPetAiSettings();
+          parent.target?.chatModel.refreshMiuAiHistory();
         }
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
