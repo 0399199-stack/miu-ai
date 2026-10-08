@@ -8,6 +8,8 @@ void main() {
   test('default response stays to one short sentence', () {
     expect(compactMiuReply('你好呀。第二句不该出现。', 1), '你好呀。');
     expect(compactMiuReply('你好呀。可以聊聊。第三句不该出现。', 2), '你好呀。可以聊聊。');
+    expect(compactMiuReply('你好呀。可以多聊一点。第三句不该出现。', 3),
+        '你好呀。可以多聊一点。');
   });
 
   test('streams text with only chat context and non-thinking mode', () async {

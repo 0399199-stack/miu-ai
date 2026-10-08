@@ -24,11 +24,7 @@ class MiuAiRequestError implements Exception {
 }
 
 String compactMiuReply(String text, int replyLength) {
-  final maxSentences = replyLength <= 1
-      ? 1
-      : replyLength == 2
-          ? 2
-          : 4;
+  final maxSentences = replyLength <= 1 ? 1 : 2;
   final maxLength = replyLength <= 1
       ? 96
       : replyLength == 2
@@ -68,7 +64,7 @@ class MiuDeepSeekClient {
     final style = switch (length) {
       1 => '这一轮只用一句简短的话回复。',
       2 => '这一轮最多用两句简短的话回复。',
-      _ => '这一轮可稍详细，但尽量不超过四句。',
+      _ => '这一轮可以稍详细，但最多两句。',
     };
     final messages = <Map<String, String>>[
       {

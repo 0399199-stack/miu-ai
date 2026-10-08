@@ -32,6 +32,13 @@ import '../../models/server_model.dart';
 /// are different widgets.
 bool _cmClosedByOperator = false;
 
+bool shouldCloseCmAfterTabRemoval({
+  required bool hasTabs,
+  required bool isWindows,
+  required String appName,
+}) =>
+    !hasTabs && !(isWindows && appName == 'MiuAI');
+
 class DesktopServerPage extends StatefulWidget {
   const DesktopServerPage({Key? key}) : super(key: key);
 
@@ -80,7 +87,11 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   }
 
   void onRemoveId(String id) {
-    if (tabController.state.value.tabs.isEmpty) {
+    if (shouldCloseCmAfterTabRemoval(
+      hasTabs: tabController.state.value.tabs.isNotEmpty,
+      isWindows: isWindows,
+      appName: appName,
+    )) {
       windowManager.close();
     }
   }
