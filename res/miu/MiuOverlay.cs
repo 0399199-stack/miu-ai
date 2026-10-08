@@ -460,12 +460,14 @@ internal sealed class OverlayApp : ApplicationContext
 
 internal static class Program
 {
+    private const float MaxGlowGain = 3f;
+
     [STAThread]
     private static void Main(string[] args)
     {
         Native.SetProcessDpiAwarenessContext(new IntPtr(-4)); // Per-monitor V2, before WinForms queries screens.
         Color color = Color.FromArgb(141, 124, 247);
-        float brightness = 1f;
+        float brightness = MaxGlowGain;
         string effect = "breathing";
         string text = "Miu AI is using your computer";
         int periodMs = 3000;
@@ -482,7 +484,7 @@ internal static class Program
             {
                 int percent = int.Parse(args[i]);
                 if (percent < 0 || percent > 100) throw new ArgumentOutOfRangeException("brightness");
-                brightness = percent / 100f;
+                brightness = percent * MaxGlowGain / 100f;
             }
             else if (args[i] == "--period-ms" && ++i < args.Length)
             {
