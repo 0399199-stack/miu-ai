@@ -45,9 +45,36 @@ void main() {
         tester.getBottomRight(find.byType(MiuPetHost)) - const Offset(80, 80));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(MiuAiChatView), findsOneWidget);
-    await tester.tap(find.byTooltip('收起消息'));
+    expect(find.text('Miu AI'), findsOneWidget);
+    expect(find.text('Terminal'), findsNothing);
+    await tester.tap(find.byTooltip('关闭聊天'));
     await tester.pump();
     expect(find.byType(MiuAiChatView), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('connected pet shows distinct AI and Terminal tabs',
+      (tester) async {
+    final chat = _ChatModel();
+    addTearDown(chat.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Center(
+          child: SizedBox(
+        width: 520,
+        height: 700,
+        child: MiuPetHost(
+          chatModel: chat,
+          keyForPeer: MessageKey('peer', 1),
+          onExpanded: (_) async {},
+        ),
+      )),
+    ));
+    await tester.tapAt(
+        tester.getBottomRight(find.byType(MiuPetHost)) - const Offset(80, 80));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Miu AI'), findsOneWidget);
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.byTooltip('关闭聊天'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

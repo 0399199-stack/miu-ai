@@ -5,17 +5,23 @@ import 'package:flutter_hbb/desktop/widgets/miu_deepseek_client.dart';
 class _FakeDeepSeek extends MiuDeepSeekClient {
   int calls = 0;
   List<MiuAiTurn> sentTurns = [];
+  String sentModel = '';
+  String sentThinking = '';
 
   @override
   Future<String> streamReply({
     required String apiKey,
     required String persona,
     required int replyLength,
+    String model = 'deepseek-flash',
+    String thinking = 'none',
     required List<MiuAiTurn> turns,
     required void Function(String) onPartial,
   }) async {
     calls++;
     sentTurns = turns;
+    sentModel = model;
+    sentThinking = thinking;
     onPartial('你好');
     return '你好';
   }
@@ -30,6 +36,8 @@ void main() {
       enabledReader: () => enabled,
       personaReader: () => '',
       lengthReader: () => 1,
+      modelReader: () => 'deepseek-v4-pro',
+      thinkingReader: () => 'high',
       client: client,
     );
     addTearDown(chat.dispose);
@@ -39,6 +47,8 @@ void main() {
     expect(chat.messages.where((m) => m.text == '你好'), hasLength(1));
     expect(client.sentTurns.last.role, 'user');
     expect(client.sentTurns.last.content, '嗨');
+    expect(client.sentModel, 'deepseek-v4-pro');
+    expect(client.sentThinking, 'high');
 
     enabled = false;
     await chat.send('不要发送');

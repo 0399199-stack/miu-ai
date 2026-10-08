@@ -23,6 +23,7 @@ import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
 import '../desktop/widgets/miu_ai_credentials.dart';
+import '../desktop/widgets/miu_ai_history.dart';
 import '../main.dart';
 import 'model.dart';
 
@@ -116,11 +117,18 @@ class ChatModel with ChangeNotifier {
   bool? _miuPetAiEnabled;
   String? _miuPetPersona;
   int? _miuPetReplyLength;
+  String? _miuPetAiModel;
+  String? _miuPetAiThinking;
+  List<MiuAiHistoryEntry> _miuAiHistory = [];
+  int _miuHistoryEpoch = 0;
 
   bool? get miuPetVisible => _miuPetVisible;
   bool? get miuPetAiEnabled => _miuPetAiEnabled;
   String? get miuPetPersona => _miuPetPersona;
   int? get miuPetReplyLength => _miuPetReplyLength;
+  String? get miuPetAiModel => _miuPetAiModel;
+  String? get miuPetAiThinking => _miuPetAiThinking;
+  List<MiuAiHistoryEntry> get miuAiHistory => List.unmodifiable(_miuAiHistory);
 
   int miuUnreadCount(MessageKey key) => _miuUnread[key] ?? 0;
 
@@ -515,10 +523,14 @@ class ChatModel with ChangeNotifier {
       }
       if (data['aiEnabled'] is bool &&
           data['persona'] is String &&
-          data['replyLength'] is int) {
+          data['replyLength'] is int &&
+          data['model'] is String &&
+          data['thinking'] is String) {
         _miuPetAiEnabled = data['aiEnabled'] as bool;
         _miuPetPersona = data['persona'] as String;
         _miuPetReplyLength = data['replyLength'] as int;
+        _miuPetAiModel = data['model'] as String;
+        _miuPetAiThinking = data['thinking'] as String;
         notifyListeners();
       }
       pending.complete(data);
@@ -547,17 +559,28 @@ class ChatModel with ChangeNotifier {
       }
     } else if (action == 'ai-state') {
       ok = true;
+    } else if (action == 'history-page' && data['value'] is Map) {
+      final cursor = data['value'] as Map;
+      final before = cursor['before'];
+      final offset = cursor['offset'];
+      if ((before == null || before is int && before > 0) &&
+          offset is int && offset >= 0 && offset <= 4000) ok = true;
     } else if (action == 'ai-settings' && data['value'] is Map) {
       final settings = data['value'] as Map;
       final enabled = settings['enabled'];
       final persona = settings['persona'];
       final replyLength = settings['replyLength'];
+      final model = settings['model'];
+      final thinking = settings['thinking'];
       if (enabled is bool &&
           persona is String &&
-          persona.length <= 500 &&
+          persona.length <= 1500 &&
           replyLength is int &&
           replyLength >= 1 &&
-          replyLength <= 3) {
+          replyLength <= 3 &&
+          (model == 'deepseek-flash' || model == 'deepseek-v4-pro') &&
+          (thinking == 'none' || thinking == 'low' ||
+              thinking == 'high' || thinking == 'max')) {
         try {
           if (enabled && MiuAiCredentialStore().read()?.isNotEmpty != true) {
             throw StateError('B 机尚未设置 DeepSeek API Key');
@@ -565,6 +588,8 @@ class ChatModel with ChangeNotifier {
           await bind.mainSetLocalOption(key: 'miu-ai-persona', value: persona);
           await bind.mainSetLocalOption(
               key: 'miu-ai-reply-length', value: replyLength.toString());
+          await bind.mainSetLocalOption(key: 'miu-ai-model', value: model);
+          await bind.mainSetLocalOption(key: 'miu-ai-thinking', value: thinking);
           await bind.mainSetLocalOption(
               key: 'miu-ai-enabled', value: enabled ? 'Y' : 'N');
           ok = true;
@@ -585,6 +610,12 @@ class ChatModel with ChangeNotifier {
       };
       if (action == 'ai-state' || action == 'ai-settings') {
         result.addAll(_readMiuPetAiSettings());
+      } else if (action == 'history-page' && ok) {
+        final cursor = data['value'] as Map;
+        result['historyPage'] = MiuAiHistoryStore.instance.page(
+          before: cursor['before'] as int?,
+          offset: cursor['offset'] as int,
+        );
       }
       bind.cmSendChat(
           connId: id,
@@ -600,6 +631,16 @@ class ChatModel with ChangeNotifier {
           MiuAiCredentialStore().read()?.isNotEmpty == true,
       'persona': bind.mainGetLocalOption(key: 'miu-ai-persona'),
       'replyLength': length != null && length >= 1 && length <= 3 ? length : 1,
+      'model': switch (bind.mainGetLocalOption(key: 'miu-ai-model')) {
+        'deepseek-v4-pro' => 'deepseek-v4-pro',
+        _ => 'deepseek-flash',
+      },
+      'thinking': switch (bind.mainGetLocalOption(key: 'miu-ai-thinking')) {
+        'low' => 'low',
+        'high' => 'high',
+        'max' => 'max',
+        _ => 'none',
+      },
     };
   }
 
@@ -634,13 +675,15 @@ class ChatModel with ChangeNotifier {
     final pending = Completer<Map<String, dynamic>>();
     _miuPendingControls[requestId] = pending;
     try {
+      final encoded = jsonEncode({
+        'id': requestId,
+        'action': action,
+        'value': value,
+      });
+      if (encoded.length > 4096) return null;
       bind.sessionSendChat(
           sessionId: sessionId,
-          text: '$_miuControlPrefix${jsonEncode({
-                'id': requestId,
-                'action': action,
-                'value': value,
-              })}');
+          text: '$_miuControlPrefix$encoded');
       return await pending.future.timeout(const Duration(seconds: 12));
     } catch (_) {
       return null;
@@ -668,23 +711,93 @@ class ChatModel with ChangeNotifier {
     await _requestMiuControl('ai-state', null);
   }
 
+  Future<void> refreshMiuAiHistory() async {
+    final epoch = ++_miuHistoryEpoch;
+    _miuAiHistory = [];
+    notifyListeners();
+    int? before;
+    var offset = 0;
+    final seen = <String>{};
+    final loaded = <MiuAiHistoryEntry>[];
+    int? partialId;
+    bool? partialFromUser;
+    var partialText = '';
+    for (var page = 0; page < 160; page++) {
+      if (!seen.add('$before:$offset')) return;
+      final result = await _requestMiuControl(
+          'history-page', {'before': before, 'offset': offset});
+      if (epoch != _miuHistoryEpoch) return;
+      final session = parent.target;
+      if (session == null || session.closed ||
+          !session.ffiModel.miuPeerAuthenticated ||
+          result?['ok'] != true || result?['historyPage'] is! Map) return;
+      final response = result!['historyPage'] as Map;
+      final parts = response['entries'];
+      if (parts is! List || parts.length > 24 || response['done'] is! bool) return;
+      for (final part in parts) {
+        if (part is! Map ||
+            part['id'] is! int ||
+            part['fromUser'] is! bool ||
+            part['text'] is! String ||
+            part['complete'] is! bool) return;
+        final id = part['id'] as int;
+        final fromUser = part['fromUser'] as bool;
+        final text = part['text'] as String;
+        if (id < 1 || text.length > 4000 ||
+            (partialId != null && (id != partialId ||
+                fromUser != partialFromUser))) return;
+        partialId ??= id;
+        partialFromUser ??= fromUser;
+        partialText += text;
+        if (partialText.length > 4000) return;
+        if (part['complete'] == true) {
+          loaded.add(MiuAiHistoryEntry(id, partialText,
+              fromUser: fromUser));
+          partialId = null;
+          partialFromUser = null;
+          partialText = '';
+          if (loaded.length > 24) return;
+        }
+      }
+      if (response['done'] == true) {
+        if (partialId != null) return;
+        _miuAiHistory = loaded;
+        notifyListeners();
+        return;
+      }
+      if (response['nextBefore'] is! int ||
+          response['nextOffset'] is! int) return;
+      before = response['nextBefore'] as int;
+      offset = response['nextOffset'] as int;
+      if (before < 1 || offset < 0 || offset > 4000) return;
+    }
+  }
+
   Future<bool> setMiuPetAiSettings({
     required bool enabled,
     required String persona,
     required int replyLength,
+    required String model,
+    required String thinking,
   }) async {
-    if (persona.length > 500 || replyLength < 1 || replyLength > 3) {
+    if (persona.length > 1500 || replyLength < 1 || replyLength > 3 ||
+        (model != 'deepseek-flash' && model != 'deepseek-v4-pro') ||
+        !{'none', 'low', 'high', 'max'}.contains(thinking)) {
       return false;
     }
     final result = await _requestMiuControl('ai-settings', {
       'enabled': enabled,
       'persona': persona,
       'replyLength': replyLength,
+      'model': model,
+      'thinking': thinking,
     });
     return result?['ok'] == true &&
         result?['aiEnabled'] == enabled &&
         result?['persona'] == persona &&
-        result?['replyLength'] == replyLength;
+        result?['replyLength'] == replyLength &&
+        result?['model'] == model &&
+        result?['thinking'] == thinking;
   }
 
   void resetMiuControlState() {
@@ -692,6 +805,10 @@ class ChatModel with ChangeNotifier {
     _miuPetAiEnabled = null;
     _miuPetPersona = null;
     _miuPetReplyLength = null;
+    _miuPetAiModel = null;
+    _miuPetAiThinking = null;
+    _miuAiHistory = [];
+    _miuHistoryEpoch++;
     for (final pending in _miuPendingControls.values) {
       if (!pending.isCompleted) pending.complete(<String, dynamic>{'ok': false});
     }

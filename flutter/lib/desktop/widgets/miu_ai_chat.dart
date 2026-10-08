@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'miu_ai_credentials.dart';
+import 'miu_ai_history.dart';
 import 'miu_deepseek_client.dart';
 
 class MiuLocalMessage {
@@ -23,7 +24,14 @@ class MiuAiConversation extends ChangeNotifier {
         _lengthReader = (() =>
             int.tryParse(bind.mainGetLocalOption(key: 'miu-ai-reply-length')) ??
             1),
-        _client = MiuDeepSeekClient();
+        _modelReader = (() => bind.mainGetLocalOption(key: 'miu-ai-model')),
+        _thinkingReader =
+            (() => bind.mainGetLocalOption(key: 'miu-ai-thinking')),
+        _client = MiuDeepSeekClient(),
+        _persistHistory = true {
+    _messages.addAll(MiuAiHistoryStore.instance.recent
+        .map((entry) => MiuLocalMessage(entry.text, fromUser: entry.fromUser)));
+  }
 
   @visibleForTesting
   MiuAiConversation.forTesting({
@@ -31,12 +39,17 @@ class MiuAiConversation extends ChangeNotifier {
     required bool Function() enabledReader,
     required String Function() personaReader,
     required int Function() lengthReader,
+    String Function()? modelReader,
+    String Function()? thinkingReader,
     required MiuDeepSeekClient client,
   })  : _keyReader = keyReader,
         _enabledReader = enabledReader,
         _personaReader = personaReader,
         _lengthReader = lengthReader,
-        _client = client;
+        _modelReader = modelReader ?? (() => 'deepseek-flash'),
+        _thinkingReader = thinkingReader ?? (() => 'none'),
+        _client = client,
+        _persistHistory = false;
 
   static final instance = MiuAiConversation._();
   final _messages = <MiuLocalMessage>[];
@@ -45,13 +58,44 @@ class MiuAiConversation extends ChangeNotifier {
   final bool Function() _enabledReader;
   final String Function() _personaReader;
   final int Function() _lengthReader;
+  final String Function() _modelReader;
+  final String Function() _thinkingReader;
   final MiuDeepSeekClient _client;
+  final bool _persistHistory;
   bool _busy = false;
 
   List<MiuLocalMessage> get messages => List.unmodifiable(_messages);
   bool get busy => _busy;
   bool get enabled => _enabledReader();
   bool get hasKey => _keyReader()?.isNotEmpty == true;
+  String get persona => _personaReader();
+  String get model => normalizeMiuDeepSeekModel(_modelReader());
+  String get thinking => normalizeMiuDeepSeekThinking(_thinkingReader());
+  int get replyLength => _lengthReader().clamp(1, 3);
+
+  Future<void> setModel(String value) async {
+    await bind.mainSetLocalOption(
+        key: 'miu-ai-model', value: normalizeMiuDeepSeekModel(value));
+    notifyListeners();
+  }
+
+  Future<void> setThinking(String value) async {
+    await bind.mainSetLocalOption(
+        key: 'miu-ai-thinking', value: normalizeMiuDeepSeekThinking(value));
+    notifyListeners();
+  }
+
+  Future<void> setReplyLength(int value) async {
+    await bind.mainSetLocalOption(
+        key: 'miu-ai-reply-length', value: value.clamp(1, 3).toString());
+    notifyListeners();
+  }
+
+  Future<void> setPersona(String value) async {
+    if (value.length > 1500) throw const FormatException('人设不能超过 1500 字');
+    await bind.mainSetLocalOption(key: 'miu-ai-persona', value: value.trim());
+    notifyListeners();
+  }
 
   Future<void> setKey(String key) async {
     _credentials.write(key);
@@ -99,16 +143,24 @@ class MiuAiConversation extends ChangeNotifier {
     _busy = true;
     notifyListeners();
     try {
+      if (_persistHistory) {
+        await MiuAiHistoryStore.instance.add(prompt, fromUser: true);
+      }
       answer.text = await _client.streamReply(
         apiKey: key,
         persona: _personaReader(),
         replyLength: _lengthReader(),
+        model: model,
+        thinking: thinking,
         turns: turns,
         onPartial: (partial) {
           answer.text = partial;
           notifyListeners();
         },
       );
+      if (_persistHistory && answer.text.isNotEmpty) {
+        await MiuAiHistoryStore.instance.add(answer.text, fromUser: false);
+      }
     } catch (error) {
       _messages.remove(answer);
       _messages.insert(
@@ -149,25 +201,54 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
 
   Future<void> _showKeySettings() async {
     final keyInput = TextEditingController();
+    final personaInput = TextEditingController(text: _conversation.persona);
     String? error;
+    var enabled = _conversation.enabled;
+    var model = _conversation.model;
+    var thinking = _conversation.thinking;
+    var replyLength = _conversation.replyLength;
+    var removeKey = false;
+    var enabledBeforeRemove = enabled;
+    var saving = false;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(builder: (context, update) {
         return AlertDialog(
-          title: const Text('Miu · DeepSeek 设置'),
+          backgroundColor: const Color(0xFFF5F7FC),
+          surfaceTintColor: Colors.transparent,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: Row(children: [
+            const Expanded(child: Text('Miu · DeepSeek 设置')),
+            IconButton(
+              tooltip: '取消，不保存',
+              onPressed: () => Navigator.pop(dialogContext),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ]),
           content: SingleChildScrollView(
             child: SizedBox(
-              width: 250,
+              width: 310,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(_conversation.hasKey
-                    ? 'API Key 已保存在这台电脑的 Windows 凭据管理器'
-                    : '请在 B 机本地输入 API Key'),
+                Text(removeKey
+                    ? '保存后将从这台电脑移除 API Key'
+                    : _conversation.hasKey
+                        ? 'API Key 已保存在这台电脑的 Windows 凭据管理器'
+                        : '请在 B 机本地输入 API Key'),
                 const SizedBox(height: 12),
                 TextField(
                   controller: keyInput,
                   obscureText: true,
                   enableSuggestions: false,
                   autocorrect: false,
+                  onChanged: (_) {
+                    if (removeKey) {
+                      update(() {
+                        removeKey = false;
+                        enabled = enabledBeforeRemove;
+                      });
+                    }
+                  },
                   decoration: const InputDecoration(
                       labelText: '输入新的 DeepSeek API Key',
                       border: OutlineInputBorder()),
@@ -177,16 +258,73 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
                 const SizedBox(height: 8),
                 SwitchListTile(
                   title: const Text('开启 AI 聊天'),
-                  value: _conversation.enabled,
-                  onChanged: (value) async {
-                    try {
-                      await _conversation.setEnabled(value);
-                      update(() => error = null);
-                    } catch (e) {
-                      update(() =>
-                          error = e.toString().replaceFirst('Bad state: ', ''));
-                    }
+                  value: enabled,
+                  onChanged: removeKey
+                      ? null
+                      : (value) => update(() {
+                            enabled = value;
+                            error = null;
+                          }),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: model,
+                  decoration: const InputDecoration(
+                      labelText: 'DeepSeek 模型', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'deepseek-flash', child: Text('DeepSeek Flash')),
+                    DropdownMenuItem(
+                        value: 'deepseek-v4-pro',
+                        child: Text('DeepSeek V4 Pro')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    update(() => model = value);
                   },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: thinking,
+                  decoration: const InputDecoration(
+                      labelText: '深度思考', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'none', child: Text('关闭')),
+                    DropdownMenuItem(value: 'low', child: Text('轻度')),
+                    DropdownMenuItem(value: 'high', child: Text('深度')),
+                    DropdownMenuItem(value: 'max', child: Text('最大')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    update(() => thinking = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Align(
+                    alignment: Alignment.centerLeft, child: Text('回复长度')),
+                Wrap(spacing: 8, children: [
+                  for (final option in const [
+                    (1, '一句话'),
+                    (2, '两句话'),
+                    (3, '详细')
+                  ])
+                    ChoiceChip(
+                      label: Text(option.$2),
+                      selected: replyLength == option.$1,
+                      onSelected: (_) => update(() => replyLength = option.$1),
+                    ),
+                ]),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: personaInput,
+                  maxLength: 1500,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: '人设提示词',
+                    helperText: '留空使用默认猫咪人设',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ]),
             ),
@@ -194,31 +332,68 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
           actions: [
             if (_conversation.hasKey)
               TextButton(
-                  onPressed: () async {
-                    await _conversation.removeKey();
-                    update(() => error = null);
+                  onPressed: () {
+                    update(() {
+                      removeKey = !removeKey;
+                      if (removeKey) {
+                        enabledBeforeRemove = enabled;
+                        enabled = false;
+                        keyInput.clear();
+                      } else {
+                        enabled = enabledBeforeRemove;
+                      }
+                      error = null;
+                    });
                   },
-                  child: const Text('移除 Key')),
+                  child: Text(removeKey ? '保留 Key' : '移除 Key')),
             TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('关闭')),
+                child: const Text('取消')),
             FilledButton(
                 onPressed: () async {
+                  if (saving) return;
+                  update(() => saving = true);
                   try {
-                    await _conversation.setKey(keyInput.text);
+                    if (enabled &&
+                        (removeKey ||
+                            (!_conversation.hasKey &&
+                                keyInput.text.trim().isEmpty))) {
+                      throw StateError('请先设置 DeepSeek API Key');
+                    }
+                    if (personaInput.text.length > 1500) {
+                      throw const FormatException('人设不能超过 1500 字');
+                    }
+                    if (removeKey) {
+                      await _conversation.removeKey();
+                    } else if (keyInput.text.trim().isNotEmpty) {
+                      await _conversation.setKey(keyInput.text);
+                    }
+                    if (!removeKey) await _conversation.setEnabled(enabled);
+                    await _conversation.setModel(model);
+                    await _conversation.setThinking(thinking);
+                    await _conversation.setReplyLength(replyLength);
+                    await _conversation.setPersona(personaInput.text);
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                   } catch (e) {
-                    update(() => error =
-                        e.toString().replaceFirst('FormatException: ', ''));
+                    if (dialogContext.mounted) {
+                      update(() {
+                        saving = false;
+                        error = e
+                            .toString()
+                            .replaceFirst('FormatException: ', '')
+                            .replaceFirst('Bad state: ', '');
+                      });
+                    }
                   }
                 },
-                child: const Text('保存 Key')),
+                child: const Text('保存设置')),
           ],
         );
       }),
     );
     keyInput.clear();
     keyInput.dispose();
+    personaInput.dispose();
   }
 
   @override
@@ -237,37 +412,39 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
         Expanded(
           child: _conversation.messages.isEmpty
               ? const Center(child: Text('嗨，我是 Miu。今天想聊什么？'))
-              : ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _conversation.messages.length,
-                  itemBuilder: (context, index) {
-                    final message = _conversation.messages[index];
-                    return Align(
-                      alignment: message.fromUser
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 265),
-                        margin: const EdgeInsets.symmetric(vertical: 5),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 13, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: message.fromUser
-                              ? const Color(0xFF657BE9)
-                              : Colors.white.withOpacity(.86),
-                          borderRadius: BorderRadius.circular(17),
-                        ),
-                        child: SelectableText(
-                            message.text.isEmpty ? '…' : message.text,
-                            style: TextStyle(
+              : LayoutBuilder(
+                  builder: (context, constraints) => ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _conversation.messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _conversation.messages[index];
+                          return Align(
+                            alignment: message.fromUser
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Container(
+                              constraints: BoxConstraints(
+                                  maxWidth: constraints.maxWidth * .9),
+                              margin: const EdgeInsets.symmetric(vertical: 5),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 13, vertical: 9),
+                              decoration: BoxDecoration(
                                 color: message.fromUser
-                                    ? Colors.white
-                                    : const Color(0xFF263252))),
-                      ),
-                    );
-                  },
-                ),
+                                    ? const Color(0xFF657BE9)
+                                    : Colors.white.withOpacity(.86),
+                                borderRadius: BorderRadius.circular(17),
+                              ),
+                              child: SelectableText(
+                                  message.text.isEmpty ? '…' : message.text,
+                                  style: TextStyle(
+                                      color: message.fromUser
+                                          ? Colors.white
+                                          : const Color(0xFF263252))),
+                            ),
+                          );
+                        },
+                      )),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 4, 10, 12),
@@ -276,8 +453,10 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
               child: TextField(
                 controller: _input,
                 maxLength: 1000,
-                maxLines: 1,
-                onSubmitted: (_) => unawaited(_send()),
+                minLines: 1,
+                maxLines: 5,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
                 decoration: InputDecoration(
                   hintText: '发消息给 Miu',
                   counterText: '',

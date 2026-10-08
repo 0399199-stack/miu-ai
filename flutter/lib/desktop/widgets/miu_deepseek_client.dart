@@ -7,6 +7,17 @@ const miuDefaultPersona = '你是 Miu，一只蓝白色桌面小猫，也是由 
     '不用客服套话、列表或重复卖萌。被问到身份时如实说明你是 AI，不假装真人。'
     '只根据当前聊天文字回复，不声称看到了屏幕、图片、文件或远控操作。';
 
+const miuDeepSeekModels = ['deepseek-flash', 'deepseek-v4-pro'];
+const miuDeepSeekThinkingLevels = ['none', 'low', 'high', 'max'];
+
+String normalizeMiuDeepSeekModel(String value) =>
+    miuDeepSeekModels.contains(value) ? value : miuDeepSeekModels.first;
+
+String normalizeMiuDeepSeekThinking(String value) =>
+    miuDeepSeekThinkingLevels.contains(value)
+        ? value
+        : miuDeepSeekThinkingLevels.first;
+
 class MiuAiTurn {
   const MiuAiTurn(this.role, this.content);
 
@@ -24,13 +35,14 @@ class MiuAiRequestError implements Exception {
 }
 
 String compactMiuReply(String text, int replyLength) {
-  final maxSentences = replyLength <= 1 ? 1 : 2;
-  final maxLength = replyLength <= 1
-      ? 96
-      : replyLength == 2
-          ? 160
-          : 300;
   final trimmed = text.trim();
+  if (replyLength >= 3) {
+    return trimmed.length > 2600
+        ? '${trimmed.substring(0, 2600).trimRight()}…'
+        : trimmed;
+  }
+  final maxSentences = replyLength <= 1 ? 1 : 2;
+  final maxLength = replyLength <= 1 ? 96 : 160;
   var sentences = 0;
   for (var i = 0; i < trimmed.length && i < maxLength; i++) {
     if ('。！？.!?'.contains(trimmed[i])) {
@@ -54,6 +66,8 @@ class MiuDeepSeekClient {
     required String apiKey,
     required String persona,
     required int replyLength,
+    String model = 'deepseek-flash',
+    String thinking = 'none',
     required List<MiuAiTurn> turns,
     required void Function(String) onPartial,
   }) async {
@@ -64,8 +78,9 @@ class MiuDeepSeekClient {
     final style = switch (length) {
       1 => '这一轮只用一句简短的话回复。',
       2 => '这一轮最多用两句简短的话回复。',
-      _ => '这一轮可以稍详细，但最多两句。',
+      _ => '用户选择了详细回复；这一轮可以多句、多段解释，优先于通常最多两句的默认要求。',
     };
+    final thinkingLevel = normalizeMiuDeepSeekThinking(thinking);
     final messages = <Map<String, String>>[
       {
         'role': 'system',
@@ -82,10 +97,13 @@ class MiuDeepSeekClient {
       request.headers.contentType = ContentType.json;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
       request.add(utf8.encode(jsonEncode({
-        'model': 'deepseek-flash',
-        'thinking': {'type': 'disabled'},
+        'model': normalizeMiuDeepSeekModel(model),
+        'thinking': {'type': thinkingLevel == 'none' ? 'disabled' : 'enabled'},
+        'reasoning_effort': thinkingLevel,
         'messages': messages,
-        'max_tokens': switch (length) { 1 => 128, 2 => 220, _ => 380 },
+        'max_tokens': thinkingLevel == 'none'
+            ? switch (length) { 1 => 128, 2 => 220, _ => 4096 }
+            : switch (length) { 1 => 4096, 2 => 6144, _ => 12000 },
         'stream': true,
       })));
       final response =

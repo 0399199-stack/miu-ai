@@ -26,6 +26,7 @@ import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 import './miu_task_center.dart';
 import './miu_pet_chat.dart';
+import './miu_ai_history_panel.dart';
 import './miu_send_image_panel.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
@@ -517,6 +518,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   late Debouncer<int> _debouncerHide;
   OverlayEntry? _taskCenter;
   OverlayEntry? _chatPanel;
+  OverlayEntry? _aiHistoryPanel;
   OverlayEntry? _imagePanel;
   bool _isCursorOverImage = false;
   final _fraction = 0.5.obs;
@@ -571,12 +573,28 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   void _showChatPanel(BuildContext context) {
     if (_chatPanel != null) return;
+    _closeAiHistoryPanel();
     _chatPanel = showMiuChatPanel(context, widget.ffi, _closeChatPanel);
   }
 
   void _closeChatPanel() {
     final entry = _chatPanel;
     _chatPanel = null;
+    entry?.remove();
+    entry?.dispose();
+  }
+
+  void _showAiHistoryPanel(BuildContext context) {
+    if (_aiHistoryPanel != null) return;
+    _closeChatPanel();
+    _aiHistoryPanel = showMiuAiHistoryPanel(
+        context, widget.ffi, _closeAiHistoryPanel);
+    unawaited(widget.ffi.chatModel.refreshMiuAiHistory());
+  }
+
+  void _closeAiHistoryPanel() {
+    final entry = _aiHistoryPanel;
+    _aiHistoryPanel = null;
     entry?.remove();
     entry?.dispose();
   }
@@ -773,6 +791,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (oldWidget.ffi != widget.ffi) {
       _closeTaskCenter();
       _closeChatPanel();
+      _closeAiHistoryPanel();
       _closeImagePanel();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -791,6 +810,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     ++_dockingOptionSyncSerial;
     _closeTaskCenter();
     _closeChatPanel();
+    _closeAiHistoryPanel();
     _closeImagePanel();
     widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
     super.dispose();
@@ -1001,6 +1021,17 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
                 onPressed: () => _showChatPanel(context),
               );
             }));
+        toolbarItems.add(_IconMenuButton(
+          icon: const Icon(Icons.auto_stories_rounded,
+              size: 19, color: Colors.white),
+          width: 38,
+          tooltip: '查看 B 与 Miu AI 的聊天记录',
+          color: _ToolbarTheme.blueColor,
+          hoverColor: _ToolbarTheme.hoverBlueColor,
+          onPressed: widget.ffi.ffiModel.miuPeerAuthenticated
+              ? () => _showAiHistoryPanel(context)
+              : null,
+        ));
         toolbarItems.add(_MiuPetButton(ffi: widget.ffi));
         toolbarItems.add(_MiuPetAiSettingsButton(ffi: widget.ffi));
         toolbarItems.add(_IconMenuButton(
@@ -2937,7 +2968,9 @@ class _GlowColorMenu extends StatelessWidget {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, update) => material.Dialog(
-          backgroundColor: Colors.transparent,
+          backgroundColor: const Color(0xFFF8FAFF),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          clipBehavior: Clip.antiAlias,
           elevation: 0,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
@@ -2956,8 +2989,15 @@ class _GlowColorMenu extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('屏幕光效',
-                        style: Theme.of(context).textTheme.titleLarge),
+                    Row(children: [
+                      Expanded(child: Text('屏幕光效',
+                          style: Theme.of(context).textTheme.titleLarge)),
+                      IconButton(
+                        tooltip: '关闭',
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ]),
                     const SizedBox(height: 6),
                     Text('仅改变 B 机屏幕上的光效',
                         style: TextStyle(color: Colors.black.withOpacity(0.55))),
@@ -3187,7 +3227,9 @@ class _MiuOverlayTextMenu extends StatelessWidget {
     final text = await showDialog<String>(
       context: context,
       builder: (dialogContext) => material.Dialog(
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFFF8FAFF),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        clipBehavior: Clip.antiAlias,
         elevation: 0,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
@@ -3205,8 +3247,15 @@ class _MiuOverlayTextMenu extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('自定义横幅文字',
-                      style: Theme.of(dialogContext).textTheme.titleLarge),
+                  Row(children: [
+                    Expanded(child: Text('自定义横幅文字',
+                        style: Theme.of(dialogContext).textTheme.titleLarge)),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ]),
                   const SizedBox(height: 8),
                   const Text('显示在 B 机屏幕顶部，最多 80 个字符'),
                   const SizedBox(height: 18),
@@ -3414,9 +3463,13 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
     final chat = ffi.chatModel;
     if (chat.miuPetAiEnabled == null ||
         chat.miuPetPersona == null ||
-        chat.miuPetReplyLength == null) return;
+        chat.miuPetReplyLength == null ||
+        chat.miuPetAiModel == null ||
+        chat.miuPetAiThinking == null) return;
     var enabled = chat.miuPetAiEnabled!;
     var replyLength = chat.miuPetReplyLength!;
+    var model = chat.miuPetAiModel!;
+    var thinking = chat.miuPetAiThinking!;
     var saving = false;
     final prompt = TextEditingController(text: chat.miuPetPersona);
     await showDialog<void>(
@@ -3424,7 +3477,9 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
       barrierColor: Colors.black.withOpacity(0.24),
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, update) => material.Dialog(
-          backgroundColor: Colors.transparent,
+          backgroundColor: const Color(0xFFF8FAFF),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+          clipBehavior: Clip.antiAlias,
           elevation: 0,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(26),
@@ -3449,9 +3504,18 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('宠物智能回复',
-                          style: TextStyle(
-                              fontSize: 21, fontWeight: FontWeight.w700)),
+                      Row(children: [
+                        const Expanded(child: Text('宠物智能回复',
+                            style: TextStyle(
+                                fontSize: 21, fontWeight: FontWeight.w700))),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: saving
+                              ? null
+                              : () => Navigator.of(dialogContext).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ]),
                       const SizedBox(height: 6),
                       const Text('Key 需在 B 机宠物窗口输入；其他设置保存在 B 机，重连后重新读取。',
                           style: TextStyle(color: Color(0xFF596579))),
@@ -3466,6 +3530,42 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
                             : (value) => update(() => enabled = value),
                       ),
                       const SizedBox(height: 16),
+                      const Text('DeepSeek 模型',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final (value, label) in [
+                          ('deepseek-flash', 'Flash'),
+                          ('deepseek-v4-pro', 'V4 Pro'),
+                        ])
+                          ChoiceChip(
+                            label: Text(label),
+                            selected: model == value,
+                            onSelected: saving
+                                ? null
+                                : (_) => update(() => model = value),
+                          ),
+                      ]),
+                      const SizedBox(height: 16),
+                      const Text('思考模式',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final (value, label) in [
+                          ('none', '关闭'),
+                          ('low', '轻度'),
+                          ('high', '深入'),
+                          ('max', '最强'),
+                        ])
+                          ChoiceChip(
+                            label: Text(label),
+                            selected: thinking == value,
+                            onSelected: saving
+                                ? null
+                                : (_) => update(() => thinking = value),
+                          ),
+                      ]),
+                      const SizedBox(height: 16),
                       const Text('人设提示词',
                           style: TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
@@ -3474,7 +3574,7 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
                         enabled: !saving,
                         minLines: 3,
                         maxLines: 5,
-                        maxLength: 500,
+                        maxLength: 1500,
                         onChanged: (_) => update(() {}),
                         decoration: InputDecoration(
                           hintText: '描述宠物的性格、语气和回复习惯',
@@ -3495,7 +3595,7 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
                           for (final (value, label) in [
                             (1, '一句话'),
                             (2, '两句话'),
-                            (3, '稍详细'),
+                            (3, '很详细'),
                           ])
                             ChoiceChip(
                               label: Text(label),
@@ -3526,6 +3626,8 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
                                         enabled: enabled,
                                         persona: prompt.text.trim(),
                                         replyLength: replyLength,
+                                        model: model,
+                                        thinking: thinking,
                                       );
                                     } catch (_) {
                                       success = false;
@@ -3564,7 +3666,9 @@ class _MiuPetAiSettingsButton extends StatelessWidget {
             ffi.ffiModel.isPeerWindows &&
             enabled != null &&
             ffi.chatModel.miuPetPersona != null &&
-            ffi.chatModel.miuPetReplyLength != null;
+            ffi.chatModel.miuPetReplyLength != null &&
+            ffi.chatModel.miuPetAiModel != null &&
+            ffi.chatModel.miuPetAiThinking != null;
         return _IconMenuButton(
           icon: Stack(
             alignment: Alignment.center,

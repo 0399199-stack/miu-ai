@@ -209,7 +209,9 @@ class _MiuTaskCenterState extends State<_MiuTaskCenter> {
   Future<void> _showOutput(_TaskRecord record) => showDialog<void>(
         context: context,
         builder: (dialogContext) => material.Dialog(
-          backgroundColor: Colors.transparent,
+          backgroundColor: const Color(0xFFF8FAFF),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          clipBehavior: Clip.antiAlias,
           elevation: 0,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 620, maxHeight: 480),

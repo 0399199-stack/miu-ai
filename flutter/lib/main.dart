@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -314,7 +315,7 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 bool _miuPetWindowVisible = false;
 const _miuPetSmallSize = Size(196, 192);
-const _miuPetChatSize = Size(360, 450);
+const _miuPetChatSize = Size(520, 700);
 
 Future<void> showMiuPetWindow() async {
   if (!_isCmReadyToShow || _miuPetWindowVisible) return;
@@ -340,8 +341,37 @@ Future<void> showMiuPetWindow() async {
 
 Future<void> resizeMiuPetWindow(bool expanded) async {
   if (!_miuPetWindowVisible) return;
-  await windowManager.setSizeAlignment(
-      expanded ? _miuPetChatSize : _miuPetSmallSize, Alignment.bottomRight);
+  final screens = await window_size.getScreenList();
+  if (screens.isEmpty) {
+    await windowManager.setSizeAlignment(
+        expanded ? _miuPetChatSize : _miuPetSmallSize, Alignment.bottomRight);
+    return;
+  }
+  final position = await windowManager.getPosition();
+  final oldSize = await windowManager.getSize();
+  final center = position + Offset(oldSize.width / 2, oldSize.height / 2);
+  final screen = screens.firstWhere(
+      (screen) => screen.visibleFrame.contains(center),
+      orElse: () => screens.first);
+  final frame = screen.visibleFrame;
+  final size = expanded
+      ? Size(
+          math.min(_miuPetChatSize.width,
+              math.max(_miuPetSmallSize.width, frame.width - 24)),
+          math.min(_miuPetChatSize.height,
+              math.max(_miuPetSmallSize.height, frame.height - 24)))
+      : _miuPetSmallSize;
+  await windowManager.setSizeAlignment(size, Alignment.bottomRight);
+  final resizedPosition = await windowManager.getPosition();
+  final minLeft = frame.left + 8;
+  final minTop = frame.top + 8;
+  await windowManager.setPosition(Offset(
+      resizedPosition.dx
+          .clamp(minLeft, math.max(minLeft, frame.right - size.width - 8))
+          .toDouble(),
+      resizedPosition.dy
+          .clamp(minTop, math.max(minTop, frame.bottom - size.height - 8))
+          .toDouble()));
 }
 
 showCmWindow({bool isStartup = false}) async {

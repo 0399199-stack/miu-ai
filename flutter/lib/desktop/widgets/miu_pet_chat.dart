@@ -4,6 +4,7 @@ import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:file_picker/file_picker.dart';
@@ -517,6 +518,7 @@ class _MiuPetHostState extends State<MiuPetHost>
   int _mood = 0;
   int _lastUnread = 0;
   bool _wasAiBusy = false;
+  int _lastAiLines = 0;
   DateTime _lastActivity = DateTime.now();
   Timer? _reactionTimer;
   Timer? _idleTimer;
@@ -583,11 +585,17 @@ class _MiuPetHostState extends State<MiuPetHost>
 
   void _onAiChanged() {
     final busy = MiuAiConversation.instance.busy;
+    final messages = MiuAiConversation.instance.messages;
+    final lines =
+        messages.isEmpty ? 0 : (messages.first.text.length / 30).ceil();
     if (busy && !_wasAiBusy) {
       _react(3, const Duration(seconds: 2));
     } else if (!busy && _wasAiBusy) {
       _react(7, const Duration(seconds: 3));
+    } else if (_expanded && lines != _lastAiLines) {
+      setState(() {});
     }
+    _lastAiLines = lines;
     _wasAiBusy = busy;
   }
 
@@ -627,6 +635,22 @@ class _MiuPetHostState extends State<MiuPetHost>
     widget.onExpanded(_expanded);
   }
 
+  Widget _chatTab(String label, bool selected, VoidCallback onPressed) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        backgroundColor:
+            selected ? const Color(0xFF637BE8) : Colors.transparent,
+        foregroundColor: selected ? Colors.white : const Color(0xFF52648F),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final unread = widget.chatAvailable
@@ -638,57 +662,104 @@ class _MiuPetHostState extends State<MiuPetHost>
           if (_expanded)
             Positioned(
               top: 5,
-              left: 5,
-              right: 5,
-              bottom: 163,
-              child: MiuGlass(
-                padding: EdgeInsets.zero,
-                radius: 24,
-                child: Column(children: [
-                  GestureDetector(
-                    onPanStart: (_) => windowManager.startDragging(),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 6, 9, 2),
-                      child: Row(children: [
-                        const Icon(Icons.chat_bubble_outline_rounded,
-                            size: 16, color: Color(0xFF657BE9)),
-                        const SizedBox(width: 7),
-                        const Expanded(child: Text('Miu',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF31427B)))),
-                        if (widget.chatAvailable) ...[
-                          TextButton(
-                            onPressed: () => setState(() => _showHumanChat = false),
-                            child: Text('和 Miu 聊', style: TextStyle(
-                              color: _showHumanChat ? const Color(0xFF7380A0) : const Color(0xFF4569D9))),
+              left: 8,
+              right: 8,
+              bottom: 166,
+              child: LayoutBuilder(builder: (context, constraints) {
+                final charsPerLine =
+                    math.max(20, ((constraints.maxWidth - 110) / 14).floor());
+                final recentLines = MiuAiConversation.instance.messages
+                    .take(3)
+                    .fold<int>(
+                        0,
+                        (lines, message) =>
+                            lines +
+                            (message.text.length / charsPerLine).ceil());
+                final height = math.min(constraints.maxHeight,
+                    350.0 + math.min(190, recentLines * 18));
+                return Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    height: height,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xF8F8FAFF), Color(0xF4EAF0FC)],
+                            ),
                           ),
-                          TextButton(
-                            onPressed: () => setState(() => _showHumanChat = true),
-                            child: Text('A 消息', style: TextStyle(
-                              color: _showHumanChat ? const Color(0xFF4569D9) : const Color(0xFF7380A0))),
-                          ),
-                        ],
-                        IconButton(
-                          tooltip: '收起消息',
-                          iconSize: 18,
-                          visualDensity: VisualDensity.compact,
-                          onPressed: _toggleChat,
-                          icon: const Icon(Icons.close_rounded,
-                              color: Color(0xFF31427B)),
+                          child: Column(children: [
+                            GestureDetector(
+                              onPanStart: (_) => windowManager.startDragging(),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 8, 10, 4),
+                                child: Row(children: [
+                                  const Icon(Icons.chat_bubble_outline_rounded,
+                                      size: 16, color: Color(0xFF657BE9)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                      child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE5EAF8),
+                                        borderRadius: BorderRadius.circular(17),
+                                      ),
+                                      child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _chatTab(
+                                                'Miu AI',
+                                                !_showHumanChat,
+                                                () => setState(() =>
+                                                    _showHumanChat = false)),
+                                            if (widget.chatAvailable)
+                                              _chatTab(
+                                                  'Terminal',
+                                                  _showHumanChat,
+                                                  () => setState(() =>
+                                                      _showHumanChat = true)),
+                                          ]),
+                                    ),
+                                  )),
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                        color: Color(0xFFF4E8EE),
+                                        shape: BoxShape.circle),
+                                    child: IconButton(
+                                      tooltip: '关闭聊天',
+                                      iconSize: 20,
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: _toggleChat,
+                                      icon: const Icon(Icons.close_rounded,
+                                          color: Color(0xFF9A435B)),
+                                    ),
+                                  ),
+                                ]),
+                              ),
+                            ),
+                            Expanded(
+                              child: _showHumanChat && widget.chatAvailable
+                                  ? MiuChatView(
+                                      chatModel: widget.chatModel,
+                                      keyForPeer: widget.keyForPeer)
+                                  : const MiuAiChatView(),
+                            ),
+                          ]),
                         ),
-                      ]),
+                      ),
                     ),
                   ),
-                  Expanded(
-                    child: _showHumanChat && widget.chatAvailable
-                        ? MiuChatView(
-                            chatModel: widget.chatModel,
-                            keyForPeer: widget.keyForPeer)
-                        : const MiuAiChatView(),
-                  ),
-                ]),
-              ),
+                );
+              }),
             ),
           Positioned(
             right: 0,
