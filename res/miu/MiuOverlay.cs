@@ -138,31 +138,30 @@ internal sealed class Overlay : Form
         BitmapData pixels = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
         try
         {
-            // Keep all four edges visible while fading the halos into the desktop.
-            int radius = (int)Math.Ceiling(176 * dpiScale);
-            byte[] topAlpha = new byte[radius], sideAlpha = new byte[radius], bottomAlpha = new byte[radius];
+            // Fade smoothly from the screen edge; the wider halo carries the extra light without a clipped solid band.
+            const double fadeRadius = 230.0;
+            int radius = (int)Math.Ceiling(fadeRadius * dpiScale);
+            byte[] edgeAlpha = new byte[radius];
             for (int d = 0; d < radius; d++)
             {
-                double logicalDistance = d / dpiScale;
-                double distanceSquared = logicalDistance * logicalDistance;
-                topAlpha[d] = (byte)Math.Min(255, brightness * (160 * Math.Exp(-distanceSquared / 80.0) + 100 * Math.Exp(-distanceSquared / 2200.0)));
-                sideAlpha[d] = (byte)Math.Min(255, brightness * (68 * Math.Exp(-distanceSquared / 1100.0) + 60 * Math.Exp(-distanceSquared / 7600.0)));
-                bottomAlpha[d] = (byte)Math.Min(255, brightness * (64 * Math.Exp(-distanceSquared / 1100.0) + 54 * Math.Exp(-distanceSquared / 7600.0)));
+                double fade = 1 - d / dpiScale / fadeRadius;
+                edgeAlpha[d] = (byte)Math.Round(255 * brightness / Program.MaxGlowGain * fade * fade);
             }
             unsafe
             {
                 byte* origin = (byte*)pixels.Scan0;
                 for (int y = 0; y < height; y++)
                 {
-                    int top = y < radius ? topAlpha[y] : 0;
+                    int top = y < radius ? edgeAlpha[y] : 0;
                     int bottomDistance = height - 1 - y;
-                    int bottom = bottomDistance < radius ? bottomAlpha[bottomDistance] : 0;
+                    int bottom = bottomDistance < radius ? edgeAlpha[bottomDistance] : 0;
                     byte* row = origin + y * pixels.Stride;
                     for (int x = 0; x < width; x++)
                     {
                         int sideDistance = Math.Min(x, width - 1 - x);
-                        int side = sideDistance < radius ? sideAlpha[sideDistance] : 0;
-                        int combined = Math.Min(255, top + side + bottom);
+                        int side = sideDistance < radius ? edgeAlpha[sideDistance] : 0;
+                        int combined = top + side - top * side / 255;
+                        combined += bottom - combined * bottom / 255;
                         if (combined == 0) continue;
                         byte a = (byte)combined;
                         byte* pixel = row + x * 4;
@@ -460,7 +459,7 @@ internal sealed class OverlayApp : ApplicationContext
 
 internal static class Program
 {
-    private const float MaxGlowGain = 3f;
+    internal const float MaxGlowGain = 3f;
 
     [STAThread]
     private static void Main(string[] args)
