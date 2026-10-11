@@ -20,22 +20,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [clean, upgrade]
+        scenario: [clean, upgrade, upgrade-run25]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - name: Download Run25 packages
+      - name: Download Run26 packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: miu-ai-test-windows-x64-unsigned
-          run-id: 38174018470
+          run-id: 38182643564
           github-token: ${{ github.token }}
           path: qa-input/current
-      - name: Download previously delivered Run17 packages
-        if: matrix.scenario == 'upgrade'
+      - name: Download fixed upgrade baseline
+        if: matrix.scenario != 'clean'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: miu-ai-test-windows-x64-unsigned
-          run-id: 38157508131
+          run-id: ${{ matrix.scenario == 'upgrade-run25' && '38174018470' || '38157508131' }}
           github-token: ${{ github.token }}
           path: qa-input/baseline
       - name: Install, verify, and uninstall in disposable VM

@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('clean','upgrade')][string]$Scenario,
+    [Parameter(Mandatory)][ValidateSet('clean','upgrade','upgrade-run25')][string]$Scenario,
     [Parameter(Mandatory)][string]$CurrentDirectory,
     [Parameter(Mandatory)][string]$BaselineDirectory,
     [Parameter(Mandatory)][string]$OutputDirectory
@@ -88,24 +88,26 @@ try {
     $environment = [ordered]@{scenario=$Scenario;os=(Get-CimInstance Win32_OperatingSystem).Caption;runner=$env:ImageVersion;isolation='Program-specific outbound firewall block; no remote sessions; no API key';login='Process-launch simulation only; no Windows sign out/reboot'}
     $environment | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'environment.json')
     Record-SystemPolicy 'before-install'
-    $expectedHash = '3014EE7F607DBF8A691877C8D1E6F43B0147F55B13196F32180253F1D63B7355'
-    if ((Get-FileHash -LiteralPath $currentMsi).Hash -ne $expectedHash) { throw 'Run25 MSI SHA-256 does not match delivered package' }
-    Check 'Run25 package identity' $true $expectedHash
-    $expectedZipHash = '7A56A38968B9B9BC860C109A992F386FD805ED7A0630366073C5B730E565E33D'
-    if ((Get-FileHash -LiteralPath (Join-Path $CurrentDirectory 'miu-ai-test-x64-portable.zip')).Hash -ne $expectedZipHash) { throw 'Run25 portable SHA-256 does not match delivered package' }
-    Check 'Run25 portable identity' $true $expectedZipHash
+    $expectedHash = '8013796D362BE3EAE5C513AF38E310790FD4C4F8E512F536CA992F3E4ED7CB05'
+    if ((Get-FileHash -LiteralPath $currentMsi).Hash -ne $expectedHash) { throw 'Run26 MSI SHA-256 does not match delivered package' }
+    Check 'Run26 package identity' $true $expectedHash
+    $expectedZipHash = '3D9069DDF056AD0D23AE90E79A65260EB0BD1905A6AD2796311D65036B69D3D5'
+    if ((Get-FileHash -LiteralPath (Join-Path $CurrentDirectory 'miu-ai-test-x64-portable.zip')).Hash -ne $expectedZipHash) { throw 'Run26 portable SHA-256 does not match delivered package' }
+    Check 'Run26 portable identity' $true $expectedZipHash
     $productCode = Read-Property $currentMsi 'ProductCode'
     if (Get-Service -Name MiuAI -ErrorAction SilentlyContinue) { throw 'Runner is not clean: MiuAI already installed' }
     New-NetFirewallRule -DisplayName $blockName -Direction Outbound -Action Block -Program (Join-Path $installDirectory 'MiuAI.exe') -Profile Any | Out-Null
     Check 'Network isolation' (@(Get-NetFirewallRule -DisplayName $blockName | Where-Object { $_.Action -eq 'Block' -and $_.Enabled -eq 'True' }).Count -eq 1) 'MiuAI.exe blocked before installation'
 
-    if ($Scenario -eq 'upgrade') {
-        $baselineHash = '84B2335327A9A2A80E7F5E618E0D77055780F95829F4B0803192C74CCE65577D'
-        if ((Get-FileHash -LiteralPath $baselineMsi).Hash -ne $baselineHash) { throw 'Baseline MSI SHA-256 does not match delivered Run17' }
+    if ($Scenario -ne 'clean') {
+        $fromRun25 = $Scenario -eq 'upgrade-run25'
+        $baselineHash = if ($fromRun25) {'3014EE7F607DBF8A691877C8D1E6F43B0147F55B13196F32180253F1D63B7355'} else {'84B2335327A9A2A80E7F5E618E0D77055780F95829F4B0803192C74CCE65577D'}
+        $baselineCommit = if ($fromRun25) {'e23268d5eaf0e5eb0476b7f23719881cbc12cd6c'} else {'e1fb4ea4202ace92bcdbbce18d9fb0ba99a30196'}
+        if ((Get-FileHash -LiteralPath $baselineMsi).Hash -ne $baselineHash) { throw "Baseline MSI SHA-256 does not match fixed $Scenario package" }
         $baselineProduct = Read-Property $baselineMsi 'ProductCode'
         Run-Msi $baselineMsi '/i' 'baseline-install'
         $installed = $true
-        Verify-Installation 'baseline' 'e1fb4ea4202ace92bcdbbce18d9fb0ba99a30196' $false
+        Verify-Installation 'baseline' $baselineCommit $fromRun25
         $configDirectory = Join-Path $env:APPDATA 'MiuAI\config'
         New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
         $sentinel = Join-Path $configDirectory 'qa-preserve.txt'
@@ -114,9 +116,9 @@ try {
 
     Run-Msi $currentMsi '/i' 'current-install'
     $installed = $true
-    Verify-Installation 'current' 'e23268d5eaf0e5eb0476b7f23719881cbc12cd6c' $true
+    Verify-Installation 'current' '0914637637d4ece556d3506de85c11b1223955b4' $true
     Record-SystemPolicy 'after-current-install'
-    if ($Scenario -eq 'upgrade') {
+    if ($Scenario -ne 'clean') {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         Check 'Old product removed' ($installer.ProductState($baselineProduct) -eq -1) "Previous ProductCode=$baselineProduct"
         Check 'User configuration directory preserved' ((Get-Content -LiteralPath $sentinel -Raw).Trim() -eq 'Miu isolated installer upgrade marker') 'Synthetic marker retained; does not assert real AI key migration'
