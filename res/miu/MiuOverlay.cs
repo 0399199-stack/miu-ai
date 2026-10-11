@@ -246,12 +246,12 @@ internal sealed class Overlay : Form
         return bitmap;
     }
 
-    internal static void SavePreview(string path, Color color, float brightness, string text)
+    internal static void SavePreview(string path, Color color, float brightness, string text, bool banner = true)
     {
         string fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
         using (Bitmap preview = new Bitmap(1280, 720))
-        using (Bitmap layer = RenderLayer(1280, 720, color, brightness, true, 1f, text))
+        using (Bitmap layer = RenderLayer(1280, 720, color, brightness, banner, 1f, text))
         using (Graphics g = Graphics.FromImage(preview))
         {
             using (LinearGradientBrush background = new LinearGradientBrush(
@@ -289,15 +289,17 @@ internal sealed class OverlayApp : ApplicationContext
     private readonly float brightness;
     private readonly string effect;
     private readonly string text;
+    private readonly bool ambient;
     private readonly int periodMs;
     private bool exiting;
 
-    internal OverlayApp(Color color, float brightness, string effect, int periodMs, string verifyDirectory, int demoSeconds, bool showTray, int parentPid, string text)
+    internal OverlayApp(Color color, float brightness, string effect, int periodMs, string verifyDirectory, int demoSeconds, bool showTray, int parentPid, string text, bool ambient)
     {
         this.color = color;
         this.brightness = brightness;
         this.effect = effect;
         this.text = text;
+        this.ambient = ambient;
         this.periodMs = periodMs;
         this.verifyDirectory = verifyDirectory;
         RebuildWindows();
@@ -361,7 +363,7 @@ internal sealed class OverlayApp : ApplicationContext
         accents = effect == "marquee" ? new Overlay[screens.Length] : new Overlay[0];
         for (int i = 0; i < screens.Length; i++)
         {
-            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary, false, text);
+            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary && !ambient, false, text);
             windows[i].Show();
             if (effect == "marquee")
             {
@@ -475,6 +477,7 @@ internal static class Program
         int demoSeconds = 0;
         int parentPid = 0;
         bool noTray = false;
+        bool ambient = false;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--color" && ++i < args.Length) color = ColorTranslator.FromHtml(args[i]);
@@ -504,19 +507,20 @@ internal static class Program
                 if (demoSeconds < 1 || demoSeconds > 3600) throw new ArgumentOutOfRangeException("demo-seconds");
             }
             else if (args[i] == "--no-tray") noTray = true;
+            else if (args[i] == "--ambient") ambient = true;
             else if (args[i] == "--parent-pid" && ++i < args.Length) parentPid = int.Parse(args[i]);
-            else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--text message] [--brightness 0..100] [--effect breathing|steady|blink|marquee|heartbeat] [--period-ms 1200..10000] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--parent-pid N]");
+            else throw new ArgumentException("Usage: MiuOverlay.exe [--color #RRGGBB] [--text message] [--brightness 0..100] [--effect breathing|steady|blink|marquee|heartbeat] [--period-ms 1200..10000] [--verify directory | --preview file.png] [--demo-seconds 1..3600] [--no-tray] [--ambient] [--parent-pid N]");
         }
         if (String.IsNullOrWhiteSpace(text) || text.Length > 160 || Array.Exists(text.ToCharArray(), Char.IsControl)) throw new ArgumentException("text");
-        if (preview != null) { Overlay.SavePreview(preview, color, brightness, text); return; }
-        // Live overlays must belong to the tray; an accidental manual launch cannot outlive a session.
+        if (preview != null) { Overlay.SavePreview(preview, color, brightness, text, !ambient); return; }
+        // Live overlays must belong to the tray; an accidental manual launch cannot outlive the helper.
         if (parentPid <= 0 && verify == null && demoSeconds == 0) return;
         Application.EnableVisualStyles();
         bool created;
         using (var mutex = new System.Threading.Mutex(true, @"Local\MiuAIOverlay", out created))
         {
             if (!created) return;
-            try { Application.Run(new OverlayApp(color, brightness, effect, periodMs, verify, demoSeconds, !noTray, parentPid, text)); }
+            try { Application.Run(new OverlayApp(color, brightness, effect, periodMs, verify, demoSeconds, !noTray, parentPid, text, ambient)); }
             finally { mutex.ReleaseMutex(); }
         }
     }

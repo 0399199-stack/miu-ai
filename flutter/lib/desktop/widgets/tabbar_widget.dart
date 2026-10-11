@@ -724,7 +724,7 @@ class _DesktopTabState extends State<DesktopTab>
               end: Alignment.bottomRight,
               colors: dark
                   ? [Colors.white.withOpacity(0.13), Colors.white.withOpacity(0.05)]
-                  : [Colors.white.withOpacity(0.72), Colors.white.withOpacity(0.42)],
+                  : [Colors.white.withOpacity(0.88), const Color(0xFFF0F7FF).withOpacity(0.72)],
             ),
             border: Border(
               bottom: BorderSide(
@@ -750,7 +750,7 @@ class _DesktopTabState extends State<DesktopTab>
                       : state.value.selectedTabInfo.key;
                   return Row(children: [
                     _miuNavTab(
-                      translate(kTabLabelHomePage),
+                      '设备',
                       current == kTabLabelHomePage,
                       () => controller.jumpToByKey(kTabLabelHomePage),
                     ),
@@ -848,7 +848,7 @@ class _DesktopTabState extends State<DesktopTab>
         padding: const EdgeInsets.symmetric(horizontal: 13),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF5B7CF2).withOpacity(dark ? 0.2 : 0.1)
+              ? const Color(0xFF438DFF).withOpacity(dark ? 0.2 : 0.12)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
         ),
@@ -856,7 +856,7 @@ class _DesktopTabState extends State<DesktopTab>
         child: Text(label,
             style: TextStyle(
                 color: selected
-                    ? (dark ? const Color(0xFFAEBEFF) : const Color(0xFF3158DD))
+                    ? (dark ? const Color(0xFFAED2FF) : const Color(0xFF1869E9))
                     : (dark ? Colors.white70 : const Color(0xFF657295)),
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500)),

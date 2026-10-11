@@ -16,6 +16,8 @@ import 'package:image/image.dart' as img;
 import 'package:window_manager/window_manager.dart';
 import 'package:win32/win32.dart' as win32;
 import 'miu_ai_chat.dart';
+import 'miu_chat_send_shortcut.dart';
+import 'miu_pet_avatar.dart';
 
 import 'miu_glass.dart';
 
@@ -444,7 +446,7 @@ class _MiuChatViewState extends State<MiuChatView> {
                       const TextStyle(color: Color(0xFFD94A61), fontSize: 12)),
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 5, 10, 12),
+            padding: const EdgeInsets.fromLTRB(10, 5, 10, 4),
             child: Row(children: [
               IconButton(
                 tooltip: '发送图片（压缩后最大 64 KB）',
@@ -457,11 +459,16 @@ class _MiuChatViewState extends State<MiuChatView> {
                     : const Icon(Icons.image_outlined),
               ),
               Expanded(
-                  child: TextField(
+                  child: MiuChatSendShortcut(
+                controller: _controller,
+                onSend: _sendText,
+                child: TextField(
                 controller: _controller,
                 maxLength: 1000,
-                maxLines: 1,
-                onSubmitted: (_) => _sendText(),
+                minLines: 1,
+                maxLines: 5,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
                 decoration: InputDecoration(
                   hintText: '发送消息',
                   counterText: '',
@@ -473,14 +480,19 @@ class _MiuChatViewState extends State<MiuChatView> {
                     borderSide: BorderSide.none,
                   ),
                 ),
-              )),
+              ))),
               IconButton(
-                tooltip: '发送',
+                tooltip: '发送（Enter）',
                 onPressed: _sendText,
                 icon: const Icon(Icons.arrow_upward_rounded,
                     color: Color(0xFF657BE9)),
               ),
             ]),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Enter 发送 · Shift+Enter 换行',
+                style: TextStyle(fontSize: 11, color: Color(0xFF697994))),
           ),
         ]);
       },
@@ -506,12 +518,7 @@ class MiuPetHost extends StatefulWidget {
   State<MiuPetHost> createState() => _MiuPetHostState();
 }
 
-class _MiuPetHostState extends State<MiuPetHost>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _motion = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 3600),
-  )..repeat();
+class _MiuPetHostState extends State<MiuPetHost> {
   bool _expanded = false;
   bool _showHumanChat = false;
   bool _hovered = false;
@@ -519,6 +526,8 @@ class _MiuPetHostState extends State<MiuPetHost>
   int _lastUnread = 0;
   bool _wasAiBusy = false;
   int _lastAiLines = 0;
+  String? _aiNotice;
+  bool _noticeHuman = true;
   DateTime _lastActivity = DateTime.now();
   Timer? _reactionTimer;
   Timer? _idleTimer;
@@ -575,6 +584,7 @@ class _MiuPetHostState extends State<MiuPetHost>
     final unread = widget.chatAvailable
         ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
     if (unread > _lastUnread) {
+      _noticeHuman = true;
       _react(5, const Duration(seconds: 3));
     } else if (unread != _lastUnread) {
       _lastActivity = DateTime.now();
@@ -591,6 +601,11 @@ class _MiuPetHostState extends State<MiuPetHost>
     if (busy && !_wasAiBusy) {
       _react(3, const Duration(seconds: 2));
     } else if (!busy && _wasAiBusy) {
+      if ((!_expanded || _showHumanChat) && messages.isNotEmpty &&
+          !messages.first.fromUser && messages.first.text.isNotEmpty) {
+        _aiNotice = messages.first.text;
+        _noticeHuman = false;
+      }
       _react(7, const Duration(seconds: 3));
     } else if (_expanded && lines != _lastAiLines) {
       setState(() {});
@@ -603,7 +618,7 @@ class _MiuPetHostState extends State<MiuPetHost>
     _reactionTimer?.cancel();
     _lastActivity = DateTime.now();
     setState(() => _mood = mood);
-    _reactionTimer = Timer(duration, () {
+    _reactionTimer = Timer(duration + const Duration(milliseconds: 3200), () {
       if (!mounted) return;
       final unread = widget.chatAvailable
           ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
@@ -617,7 +632,6 @@ class _MiuPetHostState extends State<MiuPetHost>
     MiuAiConversation.instance.removeListener(_onAiChanged);
     _reactionTimer?.cancel();
     _idleTimer?.cancel();
-    _motion.dispose();
     super.dispose();
   }
 
@@ -628,11 +642,36 @@ class _MiuPetHostState extends State<MiuPetHost>
       _expanded = !_expanded;
       if (_expanded) {
         _showHumanChat = widget.chatAvailable &&
-            widget.chatModel.miuUnreadCount(widget.keyForPeer) > 0;
+            widget.chatModel.miuUnreadCount(widget.keyForPeer) > 0 &&
+            (_noticeHuman || _aiNotice == null);
+        if (!_showHumanChat) _aiNotice = null;
       }
       _mood = _expanded ? 1 : 0;
     });
     widget.onExpanded(_expanded);
+  }
+
+  void _openNotice(bool human) {
+    _reactionTimer?.cancel();
+    _lastActivity = DateTime.now();
+    setState(() {
+      _expanded = true;
+      _showHumanChat = human;
+      if (!human) _aiNotice = null;
+      _mood = 1;
+    });
+    widget.onExpanded(true);
+  }
+
+  String _humanPreview() {
+    final messages = widget.chatModel.messages[widget.keyForPeer]?.chatMessages;
+    for (final message in messages ?? const <ChatMessage>[]) {
+      if (message.user.id == widget.chatModel.me.id) continue;
+      return message.text.startsWith(_imagePrefix)
+          ? '收到图片'
+          : message.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+    return '收到新消息';
   }
 
   Widget _chatTab(String label, bool selected, VoidCallback onPressed) {
@@ -655,6 +694,9 @@ class _MiuPetHostState extends State<MiuPetHost>
   Widget build(BuildContext context) {
     final unread = widget.chatAvailable
         ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
+    final showNotice = unread > 0 || _aiNotice != null;
+    final humanNotice = unread > 0 && (_noticeHuman || _aiNotice == null);
+    final noticeText = humanNotice ? _humanPreview() : _aiNotice ?? '';
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -719,8 +761,10 @@ class _MiuPetHostState extends State<MiuPetHost>
                                             _chatTab(
                                                 'Miu AI',
                                                 !_showHumanChat,
-                                                () => setState(() =>
-                                                    _showHumanChat = false)),
+                                                () => setState(() {
+                                                  _showHumanChat = false;
+                                                  _aiNotice = null;
+                                                })),
                                             if (widget.chatAvailable)
                                               _chatTab(
                                                   'Terminal',
@@ -795,42 +839,11 @@ class _MiuPetHostState extends State<MiuPetHost>
                     });
                   },
                   child: AnimatedScale(
-                    scale: _hovered ? 1.045 : 1,
-                    duration: const Duration(milliseconds: 260),
+                    scale: showNotice && !_expanded ? .82 : 1,
+                    alignment: Alignment.bottomCenter,
+                    duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
-                    child: AnimatedBuilder(
-                      animation: _motion,
-                      builder: (_, __) {
-                        final phase = _motion.value * math.pi * 2;
-                        final lift = _mood == 7
-                            ? -5 * (1 - math.cos(phase * 2))
-                            : -3.5 * (1 - math.cos(phase));
-                        final sway = 2.5 * math.sin(phase);
-                        final tilt = (_mood == 2 ? 0.04 : _mood == 8 ? -0.04 : 0.0) +
-                            0.027 * math.sin(phase);
-                        final scale = 1 + 0.02 * math.sin(phase - 0.5);
-                        double blinkAt(double center, double width) =>
-                            Curves.easeInOut.transform(
-                                (1 - (_motion.value - center).abs() / width)
-                                    .clamp(0.0, 1.0));
-                        final blink = math.max(
-                            blinkAt(0.24, 0.026), blinkAt(0.78, 0.036));
-                        return Transform.translate(
-                          offset: Offset(sway, lift),
-                          child: Transform.rotate(
-                            angle: tilt,
-                            child: Transform.scale(
-                              scale: scale,
-                              child: _MiuPetFace(
-                                mood: _mood,
-                                blink: blink,
-                                gaze: 1.6 * math.sin(phase),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    child: MiuPetAvatar(mood: _mood),
                   ),
                 ),
               ),
@@ -842,42 +855,47 @@ class _MiuPetHostState extends State<MiuPetHost>
               right: 8,
               top: 3,
               child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: unread > 0 ? 1 : 0,
-                  duration: const Duration(milliseconds: 280),
-                  child: AnimatedSlide(
-                    offset: unread > 0 ? Offset.zero : const Offset(0, -0.35),
-                    duration: const Duration(milliseconds: 280),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedBuilder(
-                      animation: _motion,
-                      builder: (_, child) => Transform.scale(
-                        scale: 1 + 0.035 * (1 + math.sin(_motion.value * math.pi * 2)),
-                        child: child,
-                      ),
+                ignoring: !showNotice,
+                child: GestureDetector(
+                  key: const ValueKey('miu-pet-message-notice'),
+                  onTap: () => _openNotice(humanNotice),
+                  child: AnimatedOpacity(
+                    opacity: showNotice ? 1 : 0,
+                    duration: const Duration(milliseconds: 240),
+                    child: AnimatedSlide(
+                      offset: showNotice ? Offset.zero : const Offset(0, -.35),
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOutCubic,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(colors: [
-                            Color(0xFF4D8FFB), Color(0xFF766AF2),
+                            Color(0xFFF5FBFF), Color(0xFFEAF1FF),
                           ]),
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: Colors.white, width: 1.4),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFFB9D5FA)),
                           boxShadow: const [BoxShadow(
-                            color: Color(0x665373E8), blurRadius: 16, offset: Offset(0, 5),
+                            color: Color(0x405373E8), blurRadius: 14, offset: Offset(0, 4),
                           )],
                         ),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.mark_chat_unread_rounded,
-                              size: 16, color: Colors.white),
-                          const SizedBox(width: 6),
-                          Flexible(child: Text(
-                            unread > 1 ? '${unread > 99 ? '99+' : unread} 条新消息' : '收到新消息',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white,
-                                fontSize: 12, fontWeight: FontWeight.w700),
-                          )),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            const Icon(Icons.mark_chat_unread_rounded,
+                                size: 13, color: Color(0xFF4879D9)),
+                            const SizedBox(width: 5),
+                            Expanded(child: Text(humanNotice ? 'Terminal' : 'Miu AI',
+                                style: const TextStyle(color: Color(0xFF4879D9),
+                                    fontSize: 11, fontWeight: FontWeight.w700))),
+                            if (humanNotice && unread > 1)
+                              Text('${unread > 99 ? '99+' : unread} 条',
+                                  style: const TextStyle(color: Color(0xFF4879D9), fontSize: 10)),
+                            const Icon(Icons.open_in_full_rounded,
+                                size: 11, color: Color(0xFF7C92B8)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Text(noticeText, maxLines: 2, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Color(0xFF263A60),
+                                  fontSize: 12, height: 1.3)),
                         ]),
                       ),
                     ),
@@ -889,191 +907,4 @@ class _MiuPetHostState extends State<MiuPetHost>
       ),
     );
   }
-}
-
-class _MiuPetFace extends StatelessWidget {
-  const _MiuPetFace({required this.mood, required this.blink, required this.gaze});
-
-  final int mood;
-  final double blink;
-  final double gaze;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 196,
-      height: 192,
-      child: Center(
-        child: SizedBox.square(
-          dimension: 178,
-          child: Stack(fit: StackFit.expand, children: [
-            RepaintBoundary(child: Image.asset('assets/miu_cat_head.png',
-                filterQuality: FilterQuality.medium)),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 420),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: SizedBox.expand(
-                key: ValueKey(mood),
-                child: CustomPaint(painter: _MiuCatExpression(mood, blink, gaze)),
-              ),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _MiuCatExpression extends CustomPainter {
-  const _MiuCatExpression(this.mood, this.blink, this.gaze);
-
-  final int mood;
-  final double blink;
-  final double gaze;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.scale(size.width / 126, size.height / 126);
-    const navy = Color(0xFF143571);
-    final line = Paint()
-      ..color = navy
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.2
-      ..strokeCap = StrokeCap.round;
-
-    void eye(double x, bool closed, {double look = 0}) {
-      if (closed || blink > 0.92) {
-        final curve = Path()
-          ..moveTo(x - 9, 74)
-          ..quadraticBezierTo(x, 82, x + 9, 74);
-        canvas.drawPath(curve, line);
-        return;
-      }
-      final area = Rect.fromCenter(
-          center: Offset(x, 75), width: 18, height: 24 * (1 - blink) + 2);
-      canvas.drawOval(area.inflate(1.5), Paint()..color = Colors.white);
-      canvas.drawOval(
-          area,
-          Paint()
-            ..shader = const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF12295D), Color(0xFF2059BC), Color(0xFF39C8F4)],
-            ).createShader(area));
-      canvas.drawCircle(Offset(x + look + gaze, 69), 4,
-          Paint()..color = const Color(0xFF102D68));
-      canvas.drawCircle(Offset(x - 3 + look + gaze, 69), 2.6,
-          Paint()..color = Colors.white);
-      canvas.drawCircle(Offset(x + 4, 79), 1.2,
-          Paint()..color = Colors.white.withOpacity(0.9));
-    }
-
-    eye(45, mood == 4 || mood == 7,
-        look: mood == 2 ? 2 : mood == 6 ? -2 : 0);
-    eye(81, mood == 1 || mood == 4 || mood == 7,
-        look: mood == 6 ? -2 : mood == 8 ? 2 : 0);
-
-    if (mood == 3 || mood == 8 || mood == 9) {
-      canvas.drawPath(
-          Path()
-            ..moveTo(73, 57)
-            ..quadraticBezierTo(81, mood == 3 ? 54 : 62, 89, 58),
-          line..strokeWidth = 2.3);
-    }
-    if (mood == 2 || mood == 5) {
-      canvas.drawOval(
-          Rect.fromCenter(center: const Offset(63, 96), width: 8, height: 10),
-          Paint()..color = const Color(0xFFDF7086));
-    } else if (mood == 3 || mood == 8) {
-      canvas.drawPath(
-          Path()
-            ..moveTo(58, 98)
-            ..quadraticBezierTo(63, 94, 68, 98),
-          line..strokeWidth = 2);
-    } else if (mood == 9) {
-      canvas.drawPath(
-          Path()
-            ..moveTo(56, 100)
-            ..quadraticBezierTo(63, 91, 70, 100),
-          line..strokeWidth = 2.5);
-    } else if (mood == 4 || mood == 6) {
-      canvas.drawPath(
-          Path()
-            ..moveTo(57, 94)
-            ..quadraticBezierTo(63, 100, 69, 94),
-          line..strokeWidth = 2.5);
-    } else {
-      final mouth = Path()
-        ..moveTo(54, 92)
-        ..quadraticBezierTo(63, 105, 72, 92)
-        ..quadraticBezierTo(63, 97, 54, 92)
-        ..close();
-      canvas.drawPath(mouth, Paint()..color = const Color(0xFFE74D71));
-      canvas.drawPath(mouth, line..strokeWidth = 1.4);
-    }
-
-    final accent = Paint()
-      ..color = mood == 6 ? const Color(0xFFF47EAB) : const Color(0xFF368DF3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    if (mood == 2 || mood == 8) {
-      canvas.drawPath(
-          Path()
-            ..moveTo(98, 29)
-            ..quadraticBezierTo(106, 23, 109, 30)
-            ..quadraticBezierTo(111, 35, 105, 39),
-          accent);
-      canvas.drawCircle(const Offset(105, 43), 1.4, accent..style = PaintingStyle.fill);
-    } else if (mood == 4) {
-      for (var i = 0; i < 2; i++) {
-        final x = 98.0 + i * 7;
-        canvas.drawPath(
-            Path()
-              ..moveTo(x, 31)
-              ..lineTo(x + 5, 31)
-              ..lineTo(x, 37)
-              ..lineTo(x + 5, 37),
-            accent);
-      }
-    } else if (mood == 5) {
-      canvas.drawLine(const Offset(105, 27), const Offset(105, 36), accent);
-      canvas.drawCircle(const Offset(105, 41), 1.7, accent..style = PaintingStyle.fill);
-    } else if (mood == 6) {
-      final heart = Path()
-        ..moveTo(105, 41)
-        ..cubicTo(94, 35, 99, 27, 105, 32)
-        ..cubicTo(111, 27, 116, 35, 105, 41)
-        ..close();
-      canvas.drawPath(heart, accent..style = PaintingStyle.fill);
-    } else if (mood == 7) {
-      final star = Path()
-        ..moveTo(105, 27)
-        ..lineTo(107, 32)
-        ..lineTo(112, 34)
-        ..lineTo(107, 36)
-        ..lineTo(105, 41)
-        ..lineTo(103, 36)
-        ..lineTo(98, 34)
-        ..lineTo(103, 32)
-        ..close();
-      canvas.drawPath(star, accent..style = PaintingStyle.fill);
-    } else if (mood == 9) {
-      canvas.drawPath(
-          Path()
-            ..moveTo(90, 82)
-            ..quadraticBezierTo(95, 89, 90, 92)
-            ..quadraticBezierTo(86, 89, 90, 82),
-          Paint()..color = const Color(0xFF64CFFF));
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_MiuCatExpression oldDelegate) =>
-      mood != oldDelegate.mood || blink != oldDelegate.blink ||
-      gaze != oldDelegate.gaze;
 }

@@ -127,6 +127,8 @@ class FfiModel with ChangeNotifier {
   bool _showMyCursor = false;
   bool miuPeerAuthenticated = false;
   bool? miuOverlayEnabled;
+  String miuOverlayMode = 'session';
+  bool miuOverlayModeSupported = false;
   String miuOverlayColor = '#8D7CF7';
   int miuOverlayIntensity = 100;
   int miuOverlayPeriodMs = 3000;
@@ -262,6 +264,10 @@ class FfiModel with ChangeNotifier {
     final enabled = evt['enabled'];
     if (enabled != 'true' && enabled != 'false') return;
     miuOverlayEnabled = enabled == 'true';
+    final mode = evt['mode']?.toString() ?? '';
+    miuOverlayModeSupported = const {'off', 'session', 'always'}.contains(mode);
+    miuOverlayMode = miuOverlayModeSupported
+        ? mode : miuOverlayEnabled == true ? 'session' : 'off';
     final color = evt['color']?.toString() ?? '';
     if (RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(color)) {
       miuOverlayColor = color.toUpperCase();
@@ -291,6 +297,8 @@ class FfiModel with ChangeNotifier {
     _inputBlocked = false;
     miuPeerAuthenticated = false;
     miuOverlayEnabled = null;
+    miuOverlayModeSupported = false;
+    miuOverlayMode = 'session';
     _timer?.cancel();
     _timer = null;
     _androidDocumentPickerActive = false;

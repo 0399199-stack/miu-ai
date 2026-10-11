@@ -83,6 +83,10 @@ jobs:
         working-directory: flutter
         run: flutter test --timeout 60s test/miu_task_center_test.dart
 
+      - name: Verify Miu glass UI and chat shortcuts
+        working-directory: flutter
+        run: flutter test --timeout 60s test/miu_home_device_test.dart test/miu_chat_send_shortcut_test.dart test/miu_toolbar_surface_test.dart
+
       - name: Verify Miu AI pet and chat
         working-directory: flutter
         run: flutter test --timeout 60s test/miu_ai_conversation_test.dart test/miu_deepseek_client_test.dart test/miu_ai_credentials_test.dart test/miu_pet_host_test.dart test/miu_control_path_test.dart test/miu_cm_lifecycle_test.dart test/miu_ai_history_test.dart
@@ -126,6 +130,12 @@ jobs:
         run: |
           cargo test --release --locked --lib --features flutter,hwcodec,vram miu_pairing::tests
           if ($LASTEXITCODE -ne 0) { throw 'Miu pairing proof test failed' }
+
+      - name: Verify Miu persistent glow modes and authorization
+        shell: pwsh
+        run: |
+          cargo test --release --locked --lib --features flutter,hwcodec,vram miu_overlay
+          if ($LASTEXITCODE -ne 0) { throw 'Miu overlay mode test failed' }
 
       - name: Build Miu overlay into distribution directory
         shell: pwsh

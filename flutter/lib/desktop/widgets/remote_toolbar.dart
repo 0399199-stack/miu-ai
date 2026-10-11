@@ -28,6 +28,10 @@ import './miu_task_center.dart';
 import './miu_pet_chat.dart';
 import './miu_ai_history_panel.dart';
 import './miu_send_image_panel.dart';
+import './miu_toolbar_surface.dart';
+import './miu_glow_panel.dart';
+import './miu_pet_control_panel.dart';
+import './miu_display_panel.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -364,13 +368,17 @@ class _ToolbarTheme {
       MyTheme.color(context).divider;
 
   static MenuStyle defaultMenuStyle(BuildContext context) => MenuStyle(
+        backgroundColor: _isMiuToolbar
+            ? MaterialStatePropertyAll(Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xF024334A) : const Color(0xF5F6FAFF)) : null,
+        surfaceTintColor: _isMiuToolbar ? const MaterialStatePropertyAll(Colors.transparent) : null,
         side: MaterialStateProperty.all(BorderSide(
           width: 1,
           color: borderColor(context),
         )),
         shape: MaterialStatePropertyAll(RoundedRectangleBorder(
             borderRadius:
-                BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
+                BorderRadius.circular(_isMiuToolbar ? 18 : _ToolbarTheme.menuBorderRadius))),
         padding: MaterialStateProperty.all(_ToolbarTheme.menuPadding),
       );
   static final defaultMenuButtonStyle = ButtonStyle(
@@ -423,8 +431,8 @@ Widget _toolbarButtonFace({
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: (hovered ? hoverColor : color)
-            .withOpacity(enabled ? (hovered ? 0.94 : 0.86) : 0.5),
+        color: color == _ToolbarTheme.redColor ? color
+            : miuToolbarBlue.withOpacity(enabled ? (hovered ? .15 : .07) : .04),
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
             color: Colors.white.withOpacity(hovered ? 0.68 : 0.36)),
@@ -437,7 +445,10 @@ Widget _toolbarButtonFace({
               ]
             : null,
       ),
-      child: Center(child: icon),
+      child: Center(child: ColorFiltered(
+        colorFilter: ColorFilter.mode(color == _ToolbarTheme.redColor
+            ? Colors.white : miuToolbarInk.withOpacity(enabled ? 1 : .4), BlendMode.srcIn),
+        child: icon)),
     ),
   );
 }
@@ -934,6 +945,92 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     });
   }
 
+  List<Widget> _buildMiuToolbarItems(BuildContext context, _ToolbarEdge edge) {
+    final ffi = widget.ffi;
+    final model = ffi.ffiModel;
+    Widget tracked(Widget child) => _buildPointerTrackWidget(child, ffi);
+    void dismiss() => _menuDismissCallback(ffi);
+    final canTransfer = !ffi.closed && model.miuPeerAuthenticated && model.permissions['file'] != false;
+    return [
+      Obx(() => MiuToolbarChip(icon: pin ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+        tooltip: pin ? '取消固定工具栏' : '固定工具栏', selected: pin, onPressed: widget.state.switchPin)),
+      MiuToolbarMenu(icon: model.viewOnly ? Icons.visibility_outlined : Icons.mouse_outlined,
+        label: model.viewOnly ? '仅观看' : '控制中', width: 300, onDismiss: dismiss,
+        builder: (panelContext, close) => tracked(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          MiuPanelHeading('会话模式', onClose: close),
+          for (final option in const [(false, '控制'), (true, '仅观看')])
+            RadioListTile<bool>(value: option.$1, groupValue: model.viewOnly,
+              title: Text(option.$2), dense: true, contentPadding: EdgeInsets.zero,
+              onChanged: model.keyboard || option.$1 ? (value) {
+                close(); setRemoteViewOnly(ffi, widget.id, value!);
+              } : null),
+          const Divider(),
+          Row(children: [const Expanded(child: Text('更多控制操作')),
+            _ControlMenu(id: widget.id, ffi: ffi, state: widget.state)]),
+        ]))),
+      _MiuAudioButton(ffi: ffi),
+      MiuToolbarMenu(icon: Icons.palette_outlined, label: '光效',
+        status: model.miuOverlayEnabled == null ? Colors.amber
+            : model.miuOverlayEnabled == true ? const Color(0xFF24BD87) : Colors.grey,
+        onDismiss: dismiss, builder: (panelContext, close) => tracked(MiuGlowPanel(
+          ffi: ffi, onClose: close, textControls: _MiuOverlayTextMenu(ffi: ffi)))),
+      AnimatedBuilder(animation: ffi.chatModel, builder: (context, _) => MiuToolbarMenu(
+        icon: Icons.people_outline_rounded, label: '协作', onDismiss: dismiss,
+        badge: ffi.chatModel.miuUnreadCount(MessageKey(ffi.id, ChatModel.clientModeID)),
+        builder: (panelContext, close) => tracked(Column(mainAxisSize: MainAxisSize.min, children: [
+          MiuPanelHeading('协作', onClose: close),
+          MiuPanelAction(icon: Icons.chat_bubble_outline_rounded, label: '消息',
+            onPressed: () { close(); _showChatPanel(context); }),
+          MiuPanelAction(icon: Icons.auto_stories_outlined, label: 'Miu AI 聊天记录',
+            onPressed: model.miuPeerAuthenticated ? () { close(); _showAiHistoryPanel(context); } : null),
+          MiuPanelAction(icon: Icons.image_outlined, label: '发送图片并打开',
+            onPressed: canTransfer ? () { close(); _showImagePanel(context); } : null),
+          MiuPanelAction(icon: Icons.folder_copy_outlined, label: '传输文件',
+            onPressed: canTransfer ? () { close(); _openFileTransfer(context); } : null),
+        ])))),
+      AnimatedBuilder(animation: ffi.chatModel, builder: (context, _) => MiuToolbarMenu(
+        icon: Icons.pets_rounded, label: '宠物', onDismiss: dismiss,
+        status: ffi.chatModel.miuPetVisible == null ? Colors.amber
+            : ffi.chatModel.miuPetVisible == true ? const Color(0xFF24BD87) : Colors.grey,
+        builder: (panelContext, close) => tracked(MiuPetControlPanel(ffi: ffi,
+          onClose: close, onChat: () => _showChatPanel(context),
+          onSettings: () => _MiuPetAiSettingsButton(ffi: ffi)._showSettings(context))))),
+      MiuToolbarChip(icon: Icons.bolt_rounded, label: '任务',
+        tooltip: model.keyboard ? '打开任务中心' : 'B 机未授权执行任务',
+        onPressed: !ffi.closed && model.miuPeerAuthenticated && model.keyboard && model.isPeerWindows
+            ? () => _showTaskCenter(context) : null),
+      MiuToolbarMenu(icon: Icons.desktop_windows_outlined, label: '显示', width: 370,
+        onDismiss: dismiss,
+        builder: (panelContext, close) => tracked(MiuDisplayPanel(id: widget.id, ffi: ffi,
+          onClose: close, customScaleControls: _CustomScaleMenuControls(ffi: ffi),
+          monitors: Obx(() {
+            final privacy = PrivacyModeState.find(widget.id);
+            if (pi.displaysCount.value < 2 ||
+                !(privacy.isEmpty || allowDisplaySwitchInPrivacyMode(pi, privacy.value))) {
+              return const SizedBox.shrink();
+            }
+            return Row(children: [const Expanded(child: Text('选择屏幕')),
+              _MonitorMenu(id: widget.id, ffi: ffi, edge: edge, setRemoteState: widget.setRemoteState)]);
+          }),
+          sessionActions: Column(children: [
+            Obx(() => MiuPanelAction(icon: Icons.fullscreen_rounded,
+              label: stateGlobal.fullscreen.value ? '退出全屏' : '全屏显示',
+              onPressed: () { close(); _setFullscreen(!stateGlobal.fullscreen.value); })),
+            Row(children: [const Expanded(child: Text('会话录制')), const _RecordMenu()]),
+            if (!model.viewOnly)
+              Row(children: [const Expanded(child: Text('键盘与输入')), _KeyboardMenu(id: widget.id, ffi: ffi)]),
+            Row(children: [const Expanded(child: Text('高级显示设置')),
+              _DisplayMenu(id: widget.id, ffi: ffi, state: widget.state, setFullscreen: _setFullscreen)]),
+          ]),
+        ))),
+      MiuToolbarChip(icon: Icons.close_rounded, label: '断开', danger: true,
+        onPressed: () async {
+          if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) return;
+          closeConnection(id: widget.id);
+        }),
+    ];
+  }
+
   Widget _buildToolbar(
       BuildContext context, _ToolbarEdge edge, bool isHorizontal) {
     final viewOnly = Provider.of<FfiModel>(context).viewOnly;
@@ -1105,7 +1202,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final toolbarItemsRow = Flex(
       direction: innerAxis,
       mainAxisSize: MainAxisSize.min,
-      children: [spacer, ...toolbarItems, spacer],
+      children: [spacer,
+        ...(_isMiuToolbar && widget.ffi.connType == ConnType.defaultConn
+            ? _buildMiuToolbarItems(context, edge) : toolbarItems), spacer],
     );
     final toolbarContent = ConstrainedBox(
       constraints: BoxConstraints(
@@ -1117,7 +1216,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         child: Theme(
           data: themeData(),
           child: _isMiuToolbar
-              ? toolbarItemsRow
+              ? MiuToolbarMenuBar(child: toolbarItemsRow)
               : _ToolbarTheme.borderWrapper(
                   context, toolbarItemsRow, toolbarBorderRadius),
         ),
@@ -1193,7 +1292,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           ),
           shape: MaterialStatePropertyAll(RoundedRectangleBorder(
               borderRadius:
-                  BorderRadius.circular(_ToolbarTheme.menuButtonBorderRadius))),
+                  BorderRadius.circular(_isMiuToolbar ? 10 : _ToolbarTheme.menuButtonBorderRadius))),
         ),
       ),
       dividerTheme: DividerThemeData(
@@ -2896,6 +2995,17 @@ class _MiuAudioButtonState extends State<_MiuAudioButton> {
     final muted = bind.sessionGetToggleOptionSync(
         sessionId: widget.ffi.sessionId, arg: _option);
     final allowed = Provider.of<FfiModel>(context).permissions['audio'] != false;
+    if (_isMiuToolbar) {
+      return Semantics(label: '远程声音', toggled: !muted,
+        child: MiuToolbarChip(
+          icon: muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
+          label: muted ? '静音' : '声音', selected: !muted,
+          tooltip: allowed ? (muted ? '播放 B 机声音' : '静音远程声音') : 'B 机未授权远程声音',
+          onPressed: allowed ? () async {
+            await bind.sessionToggleOption(sessionId: widget.ffi.sessionId, value: _option);
+            if (mounted) setState(() {});
+          } : null));
+    }
     return Semantics(
       label: '远程声音',
       toggled: !muted,
@@ -4142,6 +4252,21 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
   Widget build(BuildContext context) {
     assert(widget.svg != null || widget.icon != null);
     final miu = _isMiuToolbar;
+    if (miu) {
+      final isText = widget.tooltip.contains('横幅文字');
+      final isDisplay = widget.tooltip == 'Display Settings';
+      final label = isText ? '文字' : isDisplay ? '更多显示' : translate(widget.tooltip);
+      return MiuToolbarMenu(
+        icon: isText ? Icons.text_fields_rounded : isDisplay
+            ? Icons.tune_rounded : Icons.more_horiz_rounded,
+        label: label, width: isText ? 400 : 360,
+        onDismiss: widget.ffi == null ? null : () => _menuDismissCallback(widget.ffi!),
+        builder: (context, close) => _buildPointerTrackWidget(
+          Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [MiuPanelHeading(label, onClose: close),
+              ...widget.menuChildrenGetter(this)]), widget.ffi),
+      );
+    }
     final buttonSize = miu ? 38.0 : _ToolbarTheme.buttonSize;
     final buttonWidth = widget.width ?? buttonSize;
     final icon = widget.icon ??

@@ -835,6 +835,7 @@ message MiuOverlaySettings {
   string effect = 5;
   bool query = 6;
   string text = 7;
+  string mode = 8;
 }
 
 message Misc {

@@ -624,6 +624,12 @@ pub fn session_query_miu_overlay_settings(session_id: SessionID) {
     }
 }
 
+pub fn session_set_miu_overlay_mode(session_id: SessionID, mode: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_miu_overlay_mode(mode);
+    }
+}
+
 pub fn session_get_trackpad_speed(session_id: SessionID) -> Option<i32> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_trackpad_speed())
