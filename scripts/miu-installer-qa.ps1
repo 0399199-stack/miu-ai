@@ -29,8 +29,8 @@ function Check([string]$Name, [bool]$Passed, [string]$Detail, [string]$FailureSt
 function Read-Property([string]$Msi, [string]$Name) {
     $database = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Msi, 0)
     $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = '$Name'")
-    $view.Execute()
-    try { return $view.Fetch().StringData(1) } finally { $view.Close() }
+    $null = $view.Execute()
+    try { return $view.Fetch().StringData(1) } finally { $null = $view.Close() }
 }
 function Record-SystemPolicy([string]$Stage) {
     $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
