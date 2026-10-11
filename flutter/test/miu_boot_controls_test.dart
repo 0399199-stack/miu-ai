@@ -11,8 +11,9 @@ class _Chat extends ChangeNotifier implements ChatModel {
   @override
   bool? miuBootAvailable = true;
   int plays = 0;
+  bool refreshSucceeds = true;
   @override
-  Future<void> refreshMiuBootSettings() async {}
+  Future<bool> refreshMiuBootSettings() async => refreshSucceeds;
   @override
   Future<bool> setMiuBootSettings(MiuBootSettings settings) async {
     miuBootSettings = settings;
@@ -87,6 +88,18 @@ void main() {
     expect(chat.plays, 1);
     expect(find.text('B 机已开始播放，可按 Esc 跳过'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('failed refresh does not report cached settings as freshly read',
+      (tester) async {
+    final chat = await mount(tester);
+    chat.refreshSucceeds = false;
+    await tester.tap(find.byTooltip('读取 B 机设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('已读取 B 机设置'), findsNothing);
+    expect(find.text('未收到新设置，请检查连接或升级 B 机'), findsOneWidget);
+    expect(chat.miuBootSettings?.color, '#48AAFF');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

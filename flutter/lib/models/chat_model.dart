@@ -757,8 +757,11 @@ class ChatModel with ChangeNotifier {
     await _requestMiuControl('pet-state', null);
   }
 
-  Future<void> refreshMiuBootSettings() async {
-    await _requestMiuControl('boot-state', null);
+  Future<bool> refreshMiuBootSettings() async {
+    final result = await _requestMiuControl('boot-state', null);
+    return result?['ok'] == true &&
+        MiuBootSettings.parse(result?['bootSettings']) != null &&
+        result?['bootAvailable'] is bool;
   }
 
   Future<bool> setMiuBootSettings(MiuBootSettings settings) async {

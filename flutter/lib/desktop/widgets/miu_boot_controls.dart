@@ -77,12 +77,12 @@ class _MiuBootControlsState extends State<MiuBootControls> {
                           ? null
                           : () async {
                               setState(() => _status = '正在读取 B 机设置…');
-                              await chat.refreshMiuBootSettings();
+                              final ok = await chat.refreshMiuBootSettings();
                               if (mounted) {
                                 setState(() => _status =
-                                    chat.miuBootSettings == null
-                                        ? '未收到设置，请检查连接或升级 B 机'
-                                        : '已读取 B 机设置');
+                                    ok
+                                        ? '已读取 B 机设置'
+                                        : '未收到新设置，请检查连接或升级 B 机');
                               }
                             },
                       icon: const Icon(Icons.refresh_rounded)),
