@@ -85,11 +85,11 @@ jobs:
 
       - name: Verify Miu glass UI and chat shortcuts
         working-directory: flutter
-        run: flutter test --timeout 60s test/miu_home_device_test.dart test/miu_chat_send_shortcut_test.dart test/miu_toolbar_surface_test.dart
+        run: flutter test --timeout 60s test/miu_home_device_test.dart test/miu_chat_send_shortcut_test.dart test/miu_toolbar_surface_test.dart test/miu_pet_control_panel_test.dart test/miu_pet_preferences_test.dart
 
       - name: Verify Miu AI pet and chat
         working-directory: flutter
-        run: flutter test --timeout 60s test/miu_ai_conversation_test.dart test/miu_deepseek_client_test.dart test/miu_ai_credentials_test.dart test/miu_pet_host_test.dart test/miu_control_path_test.dart test/miu_cm_lifecycle_test.dart test/miu_ai_history_test.dart
+        run: flutter test --timeout 60s test/miu_ai_conversation_test.dart test/miu_deepseek_client_test.dart test/miu_ai_credentials_test.dart test/miu_pet_host_test.dart test/miu_pet_proactive_test.dart test/miu_control_path_test.dart test/miu_cm_lifecycle_test.dart test/miu_ai_history_test.dart
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1

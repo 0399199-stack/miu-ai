@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_pet_chat.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_ai_chat.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/desktop/widgets/miu_pet_preferences.dart';
+import 'package:flutter_hbb/desktop/widgets/miu_pet_avatar.dart';
 
 class _ChatModel extends ChangeNotifier implements ChatModel {
   int unread = 0;
@@ -39,7 +41,29 @@ class _ChatModel extends ChangeNotifier implements ChatModel {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
+MiuPetPreferences _testPreferences() => MiuPetPreferences.forTesting(
+    read: (_) => '', write: (_, __) async {});
+
 void main() {
+  testWidgets('pet reads saved character and follows preference changes', (tester) async {
+    final values = {'miu-pet-character': 'void'};
+    final preferences = MiuPetPreferences.forTesting(
+        read: (key) => values[key] ?? '',
+        write: (key, value) async { values[key] = value; });
+    final chat = _ChatModel();
+    await tester.pumpWidget(MaterialApp(home: MiuPetHost(
+      chatModel: chat, preferences: preferences,
+      keyForPeer: MessageKey('peer', 1), onExpanded: (_) async {},
+    )));
+    expect(tester.widget<MiuPetAvatar>(find.byType(MiuPetAvatar)).character, 'void');
+    await preferences.set(character: 'luna');
+    await tester.pump();
+    expect(tester.widget<MiuPetAvatar>(find.byType(MiuPetAvatar)).character, 'luna');
+    await tester.pumpWidget(const SizedBox.shrink());
+    preferences.dispose();
+    chat.dispose();
+  });
+
   testWidgets('offline B pet opens AI chat and can close it', (tester) async {
     final chat = _ChatModel();
     addTearDown(chat.dispose);
@@ -49,7 +73,7 @@ void main() {
         width: 360,
         height: 450,
         child: MiuPetHost(
-          chatModel: chat,
+          chatModel: chat, preferences: _testPreferences(),
           keyForPeer: MessageKey('', -2),
           chatAvailable: false,
           onExpanded: (_) async {},
@@ -78,7 +102,7 @@ void main() {
         width: 520,
         height: 700,
         child: MiuPetHost(
-          chatModel: chat,
+          chatModel: chat, preferences: _testPreferences(),
           keyForPeer: MessageKey('peer', 1),
           onExpanded: (_) async {},
         ),
@@ -103,7 +127,7 @@ void main() {
           width: 196,
           height: 192,
           child: MiuPetHost(
-            chatModel: chat,
+            chatModel: chat, preferences: _testPreferences(),
             keyForPeer: MessageKey('peer', 1),
             onExpanded: (_) async {},
           ),
@@ -148,7 +172,7 @@ void main() {
       width: 520,
       height: 700,
       child: MiuPetHost(
-          chatModel: chat,
+          chatModel: chat, preferences: _testPreferences(),
           keyForPeer: MessageKey('peer', 1),
           onExpanded: (_) async {}),
     ))));
@@ -173,7 +197,7 @@ void main() {
       width: 196,
       height: 192,
       child: MiuPetHost(
-          chatModel: chat,
+          chatModel: chat, preferences: _testPreferences(),
           keyForPeer: MessageKey('peer', 1),
           onExpanded: (_) async {}),
     )));

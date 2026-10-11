@@ -18,11 +18,32 @@ import 'package:win32/win32.dart' as win32;
 import 'miu_ai_chat.dart';
 import 'miu_chat_send_shortcut.dart';
 import 'miu_pet_avatar.dart';
+import 'miu_pet_preferences.dart';
+import 'miu_pet_proactive.dart';
 
 import 'miu_glass.dart';
 
 const _imagePrefix = 'miu:image/jpeg;base64,';
 const _maxImageBytes = 64 * 1024;
+
+bool _desktopUnlocked() {
+  if (!Platform.isWindows) return false;
+  final desktop = win32.OpenInputDesktop(
+      0, 0, win32.DESKTOP_ACCESS_FLAGS.DESKTOP_READOBJECTS);
+  if (desktop == 0) return false;
+  final name = calloc<Uint16>(256);
+  final length = calloc<Uint32>();
+  try {
+    return win32.GetUserObjectInformation(desktop,
+            win32.USER_OBJECT_INFORMATION_INDEX.UOI_NAME, name, 512, length) != 0 &&
+        name.cast<Utf16>().toDartString() == 'Default';
+  } finally {
+    calloc.free(name);
+    calloc.free(length);
+    DynamicLibrary.open('user32.dll')
+        .lookupFunction<Int32 Function(IntPtr), int Function(int)>('CloseDesktop')(desktop);
+  }
+}
 
 Duration? _computerIdleTime() {
   if (!Platform.isWindows) return null;
@@ -507,12 +528,14 @@ class MiuPetHost extends StatefulWidget {
     required this.keyForPeer,
     required this.onExpanded,
     this.chatAvailable = true,
+    this.preferences,
   }) : super(key: key);
 
   final ChatModel chatModel;
   final MessageKey keyForPeer;
   final Future<void> Function(bool) onExpanded;
   final bool chatAvailable;
+  final MiuPetPreferences? preferences;
 
   @override
   State<MiuPetHost> createState() => _MiuPetHostState();
@@ -528,6 +551,11 @@ class _MiuPetHostState extends State<MiuPetHost> {
   int _lastAiLines = 0;
   String? _aiNotice;
   bool _noticeHuman = true;
+  bool _proactiveRequest = false;
+  String? _proactiveNotice;
+  late final MiuPetPreferences _preferences;
+  late final MiuPetProactiveTimer _proactiveTimer;
+  Timer? _proactiveNoticeTimer;
   DateTime _lastActivity = DateTime.now();
   Timer? _reactionTimer;
   Timer? _idleTimer;
@@ -535,6 +563,11 @@ class _MiuPetHostState extends State<MiuPetHost> {
   @override
   void initState() {
     super.initState();
+    _preferences = widget.preferences ?? MiuPetPreferences.instance;
+    _preferences.refresh();
+    _preferences.addListener(_onPreferencesChanged);
+    _proactiveTimer = MiuPetProactiveTimer(onDue: _requestProactive);
+    _updateProactive();
     _lastUnread = widget.chatAvailable
         ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
     widget.chatModel.addListener(_onChatChanged);
@@ -569,6 +602,46 @@ class _MiuPetHostState extends State<MiuPetHost> {
     });
   }
 
+  void _updateProactive() => _proactiveTimer.update(
+      _preferences.proactiveEnabled && MiuAiConversation.instance.enabled);
+
+  void _onPreferencesChanged() {
+    _updateProactive();
+    _proactiveNoticeTimer?.cancel();
+    setState(() => _proactiveNotice = null);
+  }
+
+  bool get _canShowProactive => mounted && !_expanded &&
+      _preferences.proactiveEnabled && MiuAiConversation.instance.enabled &&
+      !MiuAiConversation.instance.busy && _aiNotice == null &&
+      (!widget.chatAvailable ||
+          widget.chatModel.miuUnreadCount(widget.keyForPeer) == 0);
+
+  Future<void> _requestProactive() async {
+    if (!_canShowProactive) return;
+    try {
+      if (!await windowManager.isVisible() || !_desktopUnlocked() ||
+          !_canShowProactive) return;
+      final revision = _preferences.revision;
+      _proactiveRequest = true;
+      final text = await MiuAiConversation.instance.generateProactive();
+      if (text == null || !_canShowProactive ||
+          !await windowManager.isVisible()) return;
+      if (!_canShowProactive || revision != _preferences.revision ||
+          !_desktopUnlocked()) return;
+      setState(() => _proactiveNotice = text);
+      _react(1, const Duration(seconds: 2));
+      _proactiveNoticeTimer?.cancel();
+      _proactiveNoticeTimer = Timer(const Duration(seconds: 12), () {
+        if (mounted) setState(() => _proactiveNotice = null);
+      });
+    } catch (_) {
+      // A hidden/unavailable desktop skips this opportunity until the next slot.
+    } finally {
+      _proactiveRequest = false;
+    }
+  }
+
   @override
   void didUpdateWidget(covariant MiuPetHost oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -594,10 +667,15 @@ class _MiuPetHostState extends State<MiuPetHost> {
   }
 
   void _onAiChanged() {
+    _updateProactive();
     final busy = MiuAiConversation.instance.busy;
     final messages = MiuAiConversation.instance.messages;
     final lines =
         messages.isEmpty ? 0 : (messages.first.text.length / 30).ceil();
+    if (_proactiveRequest || MiuAiConversation.instance.proactiveRequest) {
+      _wasAiBusy = busy;
+      return;
+    }
     if (busy && !_wasAiBusy) {
       _react(3, const Duration(seconds: 2));
     } else if (!busy && _wasAiBusy) {
@@ -628,6 +706,10 @@ class _MiuPetHostState extends State<MiuPetHost> {
 
   @override
   void dispose() {
+    _preferences.removeListener(_onPreferencesChanged);
+    _proactiveTimer.dispose();
+    _proactiveNoticeTimer?.cancel();
+    if (_proactiveRequest) MiuAiConversation.instance.invalidateProactive();
     widget.chatModel.removeListener(_onChatChanged);
     MiuAiConversation.instance.removeListener(_onAiChanged);
     _reactionTimer?.cancel();
@@ -636,9 +718,11 @@ class _MiuPetHostState extends State<MiuPetHost> {
   }
 
   void _toggleChat() {
+    _proactiveNoticeTimer?.cancel();
     _reactionTimer?.cancel();
     _lastActivity = DateTime.now();
     setState(() {
+      _proactiveNotice = null;
       _expanded = !_expanded;
       if (_expanded) {
         _showHumanChat = widget.chatAvailable &&
@@ -652,9 +736,11 @@ class _MiuPetHostState extends State<MiuPetHost> {
   }
 
   void _openNotice(bool human) {
+    _proactiveNoticeTimer?.cancel();
     _reactionTimer?.cancel();
     _lastActivity = DateTime.now();
     setState(() {
+      _proactiveNotice = null;
       _expanded = true;
       _showHumanChat = human;
       if (!human) _aiNotice = null;
@@ -694,9 +780,10 @@ class _MiuPetHostState extends State<MiuPetHost> {
   Widget build(BuildContext context) {
     final unread = widget.chatAvailable
         ? widget.chatModel.miuUnreadCount(widget.keyForPeer) : 0;
-    final showNotice = unread > 0 || _aiNotice != null;
+    final showNotice = unread > 0 || _aiNotice != null || _proactiveNotice != null;
     final humanNotice = unread > 0 && (_noticeHuman || _aiNotice == null);
-    final noticeText = humanNotice ? _humanPreview() : _aiNotice ?? '';
+    final noticeText = humanNotice ? _humanPreview() : _aiNotice ?? _proactiveNotice ?? '';
+    final isVoid = _preferences.character == 'void';
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -811,7 +898,7 @@ class _MiuPetHostState extends State<MiuPetHost> {
             width: 196,
             height: 192,
             child: Tooltip(
-              message: '点我聊天 · 双击爱心 · 长按撒娇 · 拖动可移动',
+              message: '${isVoid ? 'Miu Void' : 'Miu Luna'} · 点我聊天 · 双击互动 · 长按互动 · 拖动可移动',
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (_) => windowManager.startDragging(),
@@ -843,7 +930,7 @@ class _MiuPetHostState extends State<MiuPetHost> {
                     alignment: Alignment.bottomCenter,
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
-                    child: MiuPetAvatar(mood: _mood),
+                    child: MiuPetAvatar(mood: _mood, character: _preferences.character),
                   ),
                 ),
               ),
@@ -869,9 +956,9 @@ class _MiuPetHostState extends State<MiuPetHost> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [
-                            Color(0xFFF5FBFF), Color(0xFFEAF1FF),
-                          ]),
+                          gradient: LinearGradient(colors: isVoid
+                              ? const [Color(0xFFFDF2F5), Color(0xFFF2E7ED)]
+                              : const [Color(0xFFF5FBFF), Color(0xFFEAF1FF)]),
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(color: const Color(0xFFB9D5FA)),
                           boxShadow: const [BoxShadow(
@@ -883,7 +970,7 @@ class _MiuPetHostState extends State<MiuPetHost> {
                             const Icon(Icons.mark_chat_unread_rounded,
                                 size: 13, color: Color(0xFF4879D9)),
                             const SizedBox(width: 5),
-                            Expanded(child: Text(humanNotice ? 'Terminal' : 'Miu AI',
+                            Expanded(child: Text(humanNotice ? 'Terminal' : isVoid ? 'Miu Void' : 'Miu Luna',
                                 style: const TextStyle(color: Color(0xFF4879D9),
                                     fontSize: 11, fontWeight: FontWeight.w700))),
                             if (humanNotice && unread > 1)

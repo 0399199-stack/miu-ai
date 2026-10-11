@@ -158,6 +158,7 @@ flutter:
   assets:
     - assets/
     - assets/miu_pet_sequences/
+    - assets/miu_void_sequences/
 
   fonts:
     - family: GestureIcons

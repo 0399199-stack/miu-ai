@@ -1,8 +1,10 @@
 # Miu 透明宠物动画序列
 
-本版沿用 `assets/miu_cat_head.png` 的蓝白猫头纹理，逐帧绘制眼睑、眼球、嘴型、情绪符号，左右耳朵独立轻摆。这里是正式二维序列的生成源；应用不加载 3D 模型，也不播放 GIF。
+Miu Luna 沿用 `assets/miu_cat_head.png` 的蓝白猫头纹理，逐帧绘制眼睑、眼球、嘴型、情绪符号，左右耳朵独立轻摆。Miu Void 使用 `assets/miu_void_head.png` 的黑红原画，通过局部纹理形变保留尖眉、红色斜眼和金属外壳，另绘咆哮嘴型与情绪符号。这里是正式二维序列的生成源；应用不加载 3D 模型，也不播放 GIF。
 
 每种情绪一张 3328 × 3328 RGBA 图集，13 × 13 格，每格 256 × 256。编号：0 开心、1 眨眼、2 好奇、3 思考、4 困倦、5 惊讶、6 害羞、7 兴奋、8 疑惑、9 难过。
+
+Void 采用同一事件索引：0 邪笑、1 轻蔑、2 警觉、3 思考、4 困倦、5 咆哮、6 放松、7 狂喜、8 疑视、9 愤怒。图集位于 `assets/miu_void_sequences`；新增角色无需重新生成 Luna 图集。
 
 - 0–143：144 帧循环，60 fps，2.4 秒。
 - 144–168：25 帧从开心到该情绪的连续形变。倒放用于回到开心。
@@ -15,6 +17,11 @@
 ```powershell
 flutter test --no-pub tool/miu_pet/generate_sequences.dart
 python tool/miu_pet/pack_sequences.py build/miu-pet-frames assets/miu_pet_sequences
+
+$env:MIU_PET_CHARACTER = 'void'
+$env:MIU_PET_FRAME_DIR = 'build/miu-void-frames'
+flutter test --no-pub tool/miu_pet/generate_sequences.dart
+python tool/miu_pet/pack_sequences.py build/miu-void-frames assets/miu_void_sequences
 ```
 
 生成器借助 Flutter 的离屏绘制输出真实帧，不需要打开桌面窗口。生成后应检查眨眼帧、循环首尾、过渡首尾和透明边缘；生成动作与运行时播放器的帧数/图集尺寸须同步更新。
