@@ -1,0 +1,50 @@
+name: Miu installer isolated VM QA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/miu-boot-colors]
+    paths:
+      - .github/workflows/miu-installer-qa.yml
+      - scripts/miu-installer-qa.ps1
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  installer:
+    name: MSI ${{ matrix.scenario }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [clean, upgrade]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Download Run25 packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: miu-ai-test-windows-x64-unsigned
+          run-id: 38174018470
+          github-token: ${{ github.token }}
+          path: qa-input/current
+      - name: Download previously delivered Run17 packages
+        if: matrix.scenario == 'upgrade'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: miu-ai-test-windows-x64-unsigned
+          run-id: 38157508131
+          github-token: ${{ github.token }}
+          path: qa-input/baseline
+      - name: Install, verify, and uninstall in disposable VM
+        shell: pwsh
+        run: ./scripts/miu-installer-qa.ps1 -Scenario '${{ matrix.scenario }}' -CurrentDirectory ./qa-input/current -BaselineDirectory ./qa-input/baseline -OutputDirectory ./qa-results
+      - name: Upload installation logs and evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: miu-installer-qa-${{ matrix.scenario }}
+          path: qa-results
+          if-no-files-found: error
