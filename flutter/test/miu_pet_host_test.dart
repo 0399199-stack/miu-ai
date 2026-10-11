@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_pet_chat.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_ai_chat.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_pet_preferences.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_pet_avatar.dart';
 
@@ -44,7 +45,49 @@ class _ChatModel extends ChangeNotifier implements ChatModel {
 MiuPetPreferences _testPreferences() => MiuPetPreferences.forTesting(
     read: (_) => '', write: (_, __) async {});
 
+class _Session implements FFI {
+  _Session(this.chatModel);
+  @override
+  final ChatModel chatModel;
+  @override
+  String get id => 'peer';
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
 void main() {
+  testWidgets('dragged message panel stays reachable after narrowing window',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final chat = _ChatModel();
+    addTearDown(chat.dispose);
+    OverlayEntry? panel;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Overlay(
+      initialEntries: [OverlayEntry(builder: (context) => TextButton(
+        onPressed: () => panel = showMiuChatPanel(context, _Session(chat), () {
+          panel?.remove();
+          panel?.dispose();
+          panel = null;
+        }), child: const Text('open')))],
+    ))));
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.drag(find.text('Miu 消息'), const Offset(-100, 0));
+    await tester.pump();
+    tester.view.physicalSize = const Size(640, 720);
+    await tester.pump();
+    expect(tester.getRect(find.byTooltip('关闭消息')).right,
+        lessThanOrEqualTo(640));
+    await tester.tap(find.byTooltip('关闭消息'));
+    await tester.pump();
+    expect(find.text('Miu 消息'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('pet reads saved character and follows preference changes', (tester) async {
     final values = {'miu-pet-character': 'void'};
     final preferences = MiuPetPreferences.forTesting(

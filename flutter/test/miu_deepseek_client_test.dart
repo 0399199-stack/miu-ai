@@ -11,6 +11,23 @@ void main() {
     expect(compactMiuReply('你好呀。可以多聊一点。第三句也能看到。', 3), '你好呀。可以多聊一点。第三句也能看到。');
   });
 
+  test('reply shortening preserves decimal, version and URL periods', () {
+    expect(compactMiuReply('可以用 1.5 倍缩放。后一句。', 1), '可以用 1.5 倍缩放。');
+    expect(compactMiuReply('版本 v1.2.3 已就绪。', 1), '版本 v1.2.3 已就绪。');
+    expect(compactMiuReply('到 https://example.com 查看。', 1),
+        '到 https://example.com 查看。');
+    expect(compactMiuReply('Ready. Next sentence.', 1), 'Ready.');
+  });
+
+  test('reply shortening preserves Unicode at every length limit', () {
+    for (final mode in {1: 96, 2: 160, 3: 2600}.entries) {
+      final prefix = '中' * (mode.value - 1);
+      final shortened = compactMiuReply('$prefix😀还没说完', mode.key);
+      expect(shortened, '$prefix…');
+      expect(utf8.decode(utf8.encode(shortened)), shortened);
+    }
+  });
+
   test('streams text with only chat context and non-thinking mode', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     Map<String, dynamic>? body;

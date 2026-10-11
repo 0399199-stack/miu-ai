@@ -151,7 +151,8 @@ class _MiuFloatingChatState extends State<_MiuFloatingChat> {
         Offset(math.max(10, widget.viewportSize.width - width - 22), 62);
     return Stack(children: [
       Positioned(
-        left: position.dx,
+        left: position.dx
+            .clamp(10, math.max(10, widget.viewportSize.width - width - 10)),
         top: position.dy
             .clamp(10, math.max(10, widget.viewportSize.height - height)),
         width: width,

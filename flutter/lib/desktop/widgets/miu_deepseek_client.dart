@@ -36,23 +36,22 @@ class MiuAiRequestError implements Exception {
 
 String compactMiuReply(String text, int replyLength) {
   final trimmed = text.trim();
-  if (replyLength >= 3) {
-    return trimmed.length > 2600
-        ? '${trimmed.substring(0, 2600).trimRight()}…'
-        : trimmed;
-  }
   final maxSentences = replyLength <= 1 ? 1 : 2;
-  final maxLength = replyLength <= 1 ? 96 : 160;
+  final maxLength = replyLength >= 3 ? 2600 : replyLength <= 1 ? 96 : 160;
   var sentences = 0;
-  for (var i = 0; i < trimmed.length && i < maxLength; i++) {
-    if ('。！？.!?'.contains(trimmed[i])) {
+  for (var i = 0; replyLength < 3 && i < trimmed.length && i < maxLength; i++) {
+    final period = trimmed[i] == '.' &&
+        (i + 1 == trimmed.length || trimmed[i + 1].trim().isEmpty);
+    if ('。！？!?'.contains(trimmed[i]) || period) {
       sentences++;
       if (sentences >= maxSentences) return trimmed.substring(0, i + 1);
     }
   }
-  return trimmed.length > maxLength
-      ? '${trimmed.substring(0, maxLength).trimRight()}…'
-      : trimmed;
+  if (trimmed.length <= maxLength) return trimmed;
+  var end = maxLength;
+  if (trimmed.codeUnitAt(end - 1) >= 0xD800 &&
+      trimmed.codeUnitAt(end - 1) <= 0xDBFF) end--;
+  return '${trimmed.substring(0, end).trimRight()}…';
 }
 
 class MiuDeepSeekClient {
