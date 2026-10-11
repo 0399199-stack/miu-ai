@@ -413,6 +413,8 @@ pub enum Data {
         color: String,
         text: String,
         enabled: bool,
+        #[serde(default)]
+        mode: String,
         intensity: u32,
         period_ms: u32,
         effect: String,
@@ -1164,6 +1166,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                         color: crate::Connection::miu_overlay_color(),
                         text: crate::Connection::miu_overlay_text(),
                         enabled: crate::Connection::miu_overlay_enabled(),
+                        mode: crate::Connection::miu_overlay_mode().to_owned(),
                         intensity: crate::Connection::miu_overlay_intensity(),
                         period_ms: crate::Connection::miu_overlay_period_ms(),
                         effect: crate::Connection::miu_overlay_effect(),

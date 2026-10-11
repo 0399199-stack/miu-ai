@@ -5,6 +5,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'miu_ai_credentials.dart';
 import 'miu_ai_history.dart';
+import 'miu_chat_send_shortcut.dart';
 import 'miu_deepseek_client.dart';
 
 class MiuLocalMessage {
@@ -447,10 +448,13 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
                       )),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 12),
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
           child: Row(children: [
             Expanded(
-              child: TextField(
+              child: MiuChatSendShortcut(
+                controller: _input,
+                onSend: () => unawaited(_send()),
+                child: TextField(
                 controller: _input,
                 maxLength: 1000,
                 minLines: 1,
@@ -466,10 +470,11 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
                       borderRadius: BorderRadius.circular(18),
                       borderSide: BorderSide.none),
                 ),
+                ),
               ),
             ),
             IconButton(
-              tooltip: '发送',
+              tooltip: '发送（Enter）',
               onPressed: _conversation.busy ? null : () => unawaited(_send()),
               icon: _conversation.busy
                   ? const SizedBox(
@@ -479,6 +484,11 @@ class _MiuAiChatViewState extends State<MiuAiChatView> {
                   : const Icon(Icons.arrow_upward_rounded),
             ),
           ]),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text('Enter 发送 · Shift+Enter 换行',
+              style: TextStyle(fontSize: 11, color: Color(0xFF697994))),
         ),
       ]),
     );

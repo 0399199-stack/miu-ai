@@ -190,6 +190,8 @@ fn make_tray() -> hbb_common::ResultType<()> {
     #[cfg(windows)]
     let mut miu_overlay_effect = "breathing".to_owned();
     #[cfg(windows)]
+    let mut miu_overlay_ambient = false;
+    #[cfg(windows)]
     let mut overlay_launch_error_reported = false;
     #[cfg(target_os = "macos")]
     {
@@ -295,20 +297,24 @@ fn make_tray() -> hbb_common::ResultType<()> {
                     color,
                     text,
                     enabled,
+                    mode,
                     intensity,
                     period_ms,
                     effect,
                 } = data
                 {
-                    latest_state = Some((count, color, text, enabled, intensity, period_ms, effect));
+                    latest_state = Some((count, color, text, enabled, mode, intensity, period_ms, effect));
                 }
             }
-            if let Some((count, color, text, enabled, intensity, period_ms, effect)) = latest_state {
+            if let Some((count, color, text, enabled, mode, intensity, period_ms, effect)) = latest_state {
+                let ambient =
+                    crate::platform::windows::miu_overlay::ambient_enabled(enabled, &mode, count);
                 if color != miu_overlay_color
                     || text != miu_overlay_text
                     || intensity != miu_overlay_intensity
                     || period_ms != miu_overlay_period_ms
                     || effect != miu_overlay_effect
+                    || ambient != miu_overlay_ambient
                 {
                     stop_miu_overlay(&mut miu_overlay);
                     if miu_overlay.is_none() {
@@ -317,6 +323,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
                         miu_overlay_intensity = intensity;
                         miu_overlay_period_ms = period_ms;
                         miu_overlay_effect = effect;
+                        miu_overlay_ambient = ambient;
                     }
                 }
                 _tray_icon
@@ -324,7 +331,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
                     .unwrap()
                     .as_mut()
                     .map(|t| t.set_tooltip(Some(tooltip(count))));
-                if count == 0
+                if (count == 0 && !ambient)
                     || !enabled
                     || crate::platform::is_prelogin()
                     || crate::platform::windows::is_locked()
@@ -347,7 +354,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
                         .ok()
                         .and_then(|p| p.parent().map(|dir| dir.join("MiuOverlay.exe")))
                     {
-                        match std::process::Command::new(&path)
+                        let mut command = std::process::Command::new(&path);
+                        if miu_overlay_ambient {
+                            command.arg("--ambient");
+                        }
+                        match command
                             .arg("--no-tray")
                             .arg("--color")
                             .arg(&miu_overlay_color)
@@ -396,15 +407,15 @@ async fn start_query_overlay_state(sender: std::sync::mpsc::Sender<Data>) {
                             }
                             Ok(None) => break,
 
-                            Ok(Some(Data::MiuOverlayState { count, color, text, enabled, intensity, period_ms, effect })) => {
-                                sender.send(Data::MiuOverlayState { count, color, text, enabled, intensity, period_ms, effect }).ok();
+                            Ok(Some(Data::MiuOverlayState { count, color, text, enabled, mode, intensity, period_ms, effect })) => {
+                                sender.send(Data::MiuOverlayState { count, color, text, enabled, mode, intensity, period_ms, effect }).ok();
                             }
                             _ => {}
                         }
                     }
 
                     _ = timer.tick() => {
-                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new(), text: String::new(), enabled: true, intensity: 100, period_ms: 3000, effect: String::new() }).await.is_err() {
+                        if c.send(&Data::MiuOverlayState { count: 0, color: String::new(), text: String::new(), enabled: true, mode: String::new(), intensity: 100, period_ms: 3000, effect: String::new() }).await.is_err() {
                             break;
                         }
                     }
@@ -417,6 +428,7 @@ async fn start_query_overlay_state(sender: std::sync::mpsc::Sender<Data>) {
                 color: "#8D7CF7".to_owned(),
                 text: "Miu AI is using your computer".to_owned(),
                 enabled: true,
+                mode: String::new(),
                 intensity: 100,
                 period_ms: 3000,
                 effect: "breathing".to_owned(),

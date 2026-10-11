@@ -702,6 +702,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("period_ms", &settings.period_ms.to_string()),
                 ("effect", &settings.effect),
                 ("text", &settings.text),
+                ("mode", &settings.mode),
             ],
             &[],
         );

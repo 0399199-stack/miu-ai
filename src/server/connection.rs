@@ -3942,6 +3942,10 @@ impl Connection {
                                 "miu-overlay-enabled".to_owned(),
                                 if enabled { "Y" } else { "N" }.to_owned(),
                             );
+                            Config::set_option(
+                                keys::OPTION_MIU_OVERLAY_ALWAYS_ON.to_owned(),
+                                "N".to_owned(),
+                            );
                             self.send_miu_overlay_status().await;
                         }
                     }
@@ -3966,11 +3970,30 @@ impl Connection {
                                 Some(AuthConnType::Remote)
                             )
                         {
-                            if !settings.query && valid_miu_overlay_settings(&settings) {
+                            if !settings.query && !settings.mode.is_empty() {
+                                if let Some((enabled, always_on)) =
+                                    crate::platform::windows::miu_overlay::mode_options(&settings.mode)
+                                {
+                                    Config::set_option(
+                                        "miu-overlay-enabled".to_owned(),
+                                        enabled.to_owned(),
+                                    );
+                                    Config::set_option(
+                                        keys::OPTION_MIU_OVERLAY_ALWAYS_ON.to_owned(),
+                                        always_on.to_owned(),
+                                    );
+                                }
+                            } else if !settings.query && valid_miu_overlay_settings(&settings) {
                                 Config::set_option(
                                     "miu-overlay-enabled".to_owned(),
                                     if settings.enabled { "Y" } else { "N" }.to_owned(),
                                 );
+                                if !settings.enabled {
+                                    Config::set_option(
+                                        keys::OPTION_MIU_OVERLAY_ALWAYS_ON.to_owned(),
+                                        "N".to_owned(),
+                                    );
+                                }
                                 Config::set_option("miu-overlay-color".to_owned(), settings.color);
                                 Config::set_option(
                                     "miu-overlay-intensity".to_owned(),
@@ -5723,6 +5746,14 @@ impl Connection {
     }
 
     #[cfg(windows)]
+    pub fn miu_overlay_mode() -> &'static str {
+        crate::platform::windows::miu_overlay::mode(
+            Self::miu_overlay_enabled(),
+            &Config::get_option(keys::OPTION_MIU_OVERLAY_ALWAYS_ON),
+        )
+    }
+
+    #[cfg(windows)]
     pub fn miu_overlay_intensity() -> u32 {
         Config::get_option("miu-overlay-intensity")
             .parse::<u32>()
@@ -5773,6 +5804,7 @@ impl Connection {
             period_ms: Self::miu_overlay_period_ms(),
             effect: Self::miu_overlay_effect(),
             text: Self::miu_overlay_text(),
+            mode: Self::miu_overlay_mode().to_owned(),
             ..Default::default()
         });
         let mut msg = Message::new();
@@ -7886,6 +7918,25 @@ mod test {
             AuthConnType::FileTransfer,
             [(misc_msg(|m| m.set_miu_overlay_settings(settings)), Some("misc.miu_overlay_settings"))],
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn miu_overlay_always_mode_requires_remote_scope() {
+        let settings = MiuOverlaySettings {
+            mode: "always".to_owned(),
+            ..Default::default()
+        };
+        assert_scopes(
+            AuthConnType::Remote,
+            [(misc_msg(|m| m.set_miu_overlay_settings(settings.clone())), None)],
+        );
+        for conn_type in [AuthConnType::ViewCamera, AuthConnType::FileTransfer, AuthConnType::Terminal] {
+            assert_scopes(
+                conn_type,
+                [(misc_msg(|m| m.set_miu_overlay_settings(settings.clone())), Some("misc.miu_overlay_settings"))],
+            );
+        }
     }
 
     #[cfg(windows)]
