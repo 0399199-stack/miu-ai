@@ -8,8 +8,9 @@ import 'package:flutter/services.dart';
 /// Transparent 60 fps sequences with neutral transition frames between moods.
 /// Pointer response is independent, so interaction never restarts the loop.
 class MiuPetAvatar extends StatefulWidget {
-  const MiuPetAvatar({super.key, required this.mood});
+  const MiuPetAvatar({super.key, required this.mood, this.character = 'luna'});
   final int mood;
+  final String character;
 
   @override
   State<MiuPetAvatar> createState() => _MiuPetAvatarState();
@@ -26,6 +27,7 @@ class _MiuPetAvatarState extends State<MiuPetAvatar>
   ui.Image? _next;
   int _currentMood = 0;
   int _nextMood = 0;
+  String _currentCharacter = 'luna';
   bool _loading = false;
   bool _loadFailed = false;
   double _loopSeconds = 0;
@@ -41,11 +43,17 @@ class _MiuPetAvatarState extends State<MiuPetAvatar>
   @override
   void didUpdateWidget(covariant MiuPetAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.mood != widget.mood) {
-      if (_transition == -2 && _nextMood != widget.mood) {
+    if (oldWidget.mood != widget.mood || oldWidget.character != widget.character) {
+      if ((_transition == -2 && _nextMood != widget.mood) ||
+          oldWidget.character != widget.character) {
         _next?.dispose();
         _next = null;
         _transition = -1;
+        if (oldWidget.character != widget.character) {
+          _frame.image = _current;
+          _frame.index = 0;
+          _loopSeconds = 0;
+        }
       }
       _loadMood();
     }
@@ -54,11 +62,14 @@ class _MiuPetAvatarState extends State<MiuPetAvatar>
   Future<void> _loadMood() async {
     if (_loading ||
         _next != null ||
-        (_current != null && _currentMood == widget.mood)) return;
+        (_current != null && _currentMood == widget.mood &&
+            _currentCharacter == widget.character)) return;
     _loading = true;
     final mood = widget.mood.clamp(0, 9);
+    final character = widget.character;
+    final directory = character == 'void' ? 'miu_void_sequences' : 'miu_pet_sequences';
     try {
-      final bytes = await rootBundle.load('assets/miu_pet_sequences/$mood.png');
+      final bytes = await rootBundle.load('assets/$directory/$mood.png');
       final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
       final image = (await codec.getNextFrame()).image;
       codec.dispose();
@@ -66,13 +77,17 @@ class _MiuPetAvatarState extends State<MiuPetAvatar>
         image.dispose();
         return;
       }
-      if (_current != null && mood != widget.mood) {
+      if (mood != widget.mood || character != widget.character) {
         image.dispose();
         return;
       }
-      if (_current == null) {
+      if (_current == null || _currentCharacter != character) {
+        _current?.dispose();
         _current = image;
         _currentMood = mood;
+        _currentCharacter = character;
+        _loopSeconds = 0;
+        _frame.index = 0;
         _frame.image = image;
       } else {
         _next = image;
@@ -87,7 +102,8 @@ class _MiuPetAvatarState extends State<MiuPetAvatar>
       if (mounted &&
           !_loadFailed &&
           _transition < 0 &&
-          _currentMood != widget.mood) _loadMood();
+          (_currentMood != widget.mood ||
+              _currentCharacter != widget.character)) _loadMood();
     }
   }
 
@@ -157,7 +173,8 @@ class _MiuPetAvatarState extends State<MiuPetAvatar>
           width: 196,
           height: 192,
           child: _loadFailed && _current == null
-              ? Image.asset('assets/miu_cat_head.png')
+              ? Image.asset(widget.character == 'void'
+                  ? 'assets/miu_void_head.png' : 'assets/miu_cat_head.png')
               : CustomPaint(painter: _PetSequencePainter(_frame)),
         )),
       );

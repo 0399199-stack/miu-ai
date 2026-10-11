@@ -23,7 +23,9 @@ import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
 import '../desktop/widgets/miu_ai_credentials.dart';
+import '../desktop/widgets/miu_ai_chat.dart';
 import '../desktop/widgets/miu_ai_history.dart';
+import '../desktop/widgets/miu_pet_preferences.dart';
 import '../main.dart';
 import 'model.dart';
 
@@ -119,6 +121,8 @@ class ChatModel with ChangeNotifier {
   int? _miuPetReplyLength;
   String? _miuPetAiModel;
   String? _miuPetAiThinking;
+  String? _miuPetCharacter;
+  bool? _miuPetProactiveEnabled;
   List<MiuAiHistoryEntry> _miuAiHistory = [];
   int _miuHistoryEpoch = 0;
 
@@ -128,6 +132,8 @@ class ChatModel with ChangeNotifier {
   int? get miuPetReplyLength => _miuPetReplyLength;
   String? get miuPetAiModel => _miuPetAiModel;
   String? get miuPetAiThinking => _miuPetAiThinking;
+  String? get miuPetCharacter => _miuPetCharacter;
+  bool? get miuPetProactiveEnabled => _miuPetProactiveEnabled;
   List<MiuAiHistoryEntry> get miuAiHistory => List.unmodifiable(_miuAiHistory);
 
   int miuUnreadCount(MessageKey key) => _miuUnread[key] ?? 0;
@@ -521,6 +527,12 @@ class ChatModel with ChangeNotifier {
         _miuPetVisible = data['visible'] as bool;
         notifyListeners();
       }
+      if ((data['character'] == 'luna' || data['character'] == 'void') &&
+          data['proactiveEnabled'] is bool) {
+        _miuPetCharacter = data['character'] as String;
+        _miuPetProactiveEnabled = data['proactiveEnabled'] as bool;
+        notifyListeners();
+      }
       if (data['aiEnabled'] is bool &&
           data['persona'] is String &&
           data['replyLength'] is int &&
@@ -553,6 +565,21 @@ class ChatModel with ChangeNotifier {
     } else if (action == 'pet-visible' && data['value'] is bool) {
       session.serverModel.setMiuPetVisible(data['value'] as bool);
       ok = true;
+    } else if (action == 'pet-preferences' && data['value'] is Map) {
+      final settings = data['value'] as Map;
+      final character = settings['character'];
+      final proactiveEnabled = settings['proactiveEnabled'];
+      if ((character == 'luna' || character == 'void') &&
+          proactiveEnabled is bool) {
+        try {
+          await MiuPetPreferences.instance.set(
+              character: character as String,
+              proactiveEnabled: proactiveEnabled);
+          ok = true;
+        } catch (_) {
+          ok = false;
+        }
+      }
     } else if (action == 'open-image' && data['value'] is String) {
       if (client.keyboard && client.file) {
         ok = await _openMiuImage(data['value'] as String);
@@ -585,6 +612,7 @@ class ChatModel with ChangeNotifier {
           if (enabled && MiuAiCredentialStore().read()?.isNotEmpty != true) {
             throw StateError('B 机尚未设置 DeepSeek API Key');
           }
+          MiuAiConversation.instance.invalidateProactive();
           await bind.mainSetLocalOption(key: 'miu-ai-persona', value: persona);
           await bind.mainSetLocalOption(
               key: 'miu-ai-reply-length', value: replyLength.toString());
@@ -592,6 +620,7 @@ class ChatModel with ChangeNotifier {
           await bind.mainSetLocalOption(key: 'miu-ai-thinking', value: thinking);
           await bind.mainSetLocalOption(
               key: 'miu-ai-enabled', value: enabled ? 'Y' : 'N');
+          MiuAiConversation.instance.refreshSettings();
           ok = true;
         } catch (_) {
           ok = false;
@@ -608,6 +637,15 @@ class ChatModel with ChangeNotifier {
         'ok': ok,
         'visible': session.serverModel.miuPetVisible,
       };
+      if (action == 'pet-state' || action == 'pet-visible' ||
+          action == 'pet-preferences' || action == 'ai-state' ||
+          action == 'ai-settings') {
+        final preferences = MiuPetPreferences.instance..refresh();
+        result.addAll({
+          'character': preferences.character,
+          'proactiveEnabled': preferences.proactiveEnabled,
+        });
+      }
       if (action == 'ai-state' || action == 'ai-settings') {
         result.addAll(_readMiuPetAiSettings());
       } else if (action == 'history-page' && ok) {
@@ -699,6 +737,19 @@ class ChatModel with ChangeNotifier {
   Future<bool> setMiuPetVisible(bool visible) async {
     final result = await _requestMiuControl('pet-visible', visible);
     return result?['ok'] == true && result?['visible'] == visible;
+  }
+
+  Future<bool> setMiuPetPreferences({
+    required String character,
+    required bool proactiveEnabled,
+  }) async {
+    if (character != 'luna' && character != 'void') return false;
+    final result = await _requestMiuControl('pet-preferences', {
+      'character': character,
+      'proactiveEnabled': proactiveEnabled,
+    });
+    return result?['ok'] == true && result?['character'] == character &&
+        result?['proactiveEnabled'] == proactiveEnabled;
   }
 
   Future<bool> requestMiuOpenImage(String remotePath) async {
@@ -807,6 +858,8 @@ class ChatModel with ChangeNotifier {
     _miuPetReplyLength = null;
     _miuPetAiModel = null;
     _miuPetAiThinking = null;
+    _miuPetCharacter = null;
+    _miuPetProactiveEnabled = null;
     _miuAiHistory = [];
     _miuHistoryEpoch++;
     for (final pending in _miuPendingControls.values) {

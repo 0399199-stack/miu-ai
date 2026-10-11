@@ -2,12 +2,15 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'void_sequence_painter.dart';
 
 // Authoring widget only. The application plays the generated transparent atlases.
 class MiuPetSequenceFrame extends StatefulWidget {
   const MiuPetSequenceFrame(
-      {super.key, required this.mood, required this.seconds, this.blend = 1});
+      {super.key, required this.mood, required this.seconds, this.blend = 1,
+      this.character = 'luna'});
   final int mood;
+  final String character;
   final double seconds, blend;
   @override
   State<MiuPetSequenceFrame> createState() => _MiuPetSequenceFrameState();
@@ -22,7 +25,8 @@ class _MiuPetSequenceFrameState extends State<MiuPetSequenceFrame> {
   }
 
   Future<void> _load() async {
-    final bytes = await rootBundle.load('assets/miu_cat_head.png');
+    final bytes = await rootBundle.load(widget.character == 'void'
+        ? 'assets/miu_void_head.png' : 'assets/miu_cat_head.png');
     final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
     final image = (await codec.getNextFrame()).image;
     codec.dispose();
@@ -49,7 +53,9 @@ class _MiuPetSequenceFrameState extends State<MiuPetSequenceFrame> {
         height: 192,
         child: _image == null
             ? const SizedBox.shrink()
-            : CustomPaint(painter: _PetPainter(_image!, frame)));
+            : CustomPaint(painter: widget.character == 'void'
+                ? MiuVoidSequencePainter(_image!, widget.mood, widget.seconds, widget.blend)
+                : _PetPainter(_image!, frame)));
   }
 }
 

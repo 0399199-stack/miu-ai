@@ -12,6 +12,7 @@ void main() {
     output.createSync(recursive: true);
     final key = GlobalKey();
     final moods = int.parse(Platform.environment['MIU_PET_MOODS'] ?? '10');
+    final character = Platform.environment['MIU_PET_CHARACTER'] ?? 'luna';
     for (var mood = 0; mood < moods; mood++) {
       Directory('${output.path}/$mood').createSync();
       for (var frame = 0; frame < 169; frame++) {
@@ -20,6 +21,7 @@ void main() {
           child: RepaintBoundary(
               key: key,
               child: MiuPetSequenceFrame(
+                character: character,
                 mood: mood,
                 seconds: frame < 144 ? frame / 60 : 0,
                 blend: frame < 144

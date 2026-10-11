@@ -7,6 +7,7 @@ import 'miu_ai_credentials.dart';
 import 'miu_ai_history.dart';
 import 'miu_chat_send_shortcut.dart';
 import 'miu_deepseek_client.dart';
+import 'miu_pet_preferences.dart';
 
 class MiuLocalMessage {
   MiuLocalMessage(this.text, {this.fromUser = false, this.inContext = true});
@@ -28,6 +29,7 @@ class MiuAiConversation extends ChangeNotifier {
         _modelReader = (() => bind.mainGetLocalOption(key: 'miu-ai-model')),
         _thinkingReader =
             (() => bind.mainGetLocalOption(key: 'miu-ai-thinking')),
+        _petPreferences = MiuPetPreferences.instance,
         _client = MiuDeepSeekClient(),
         _persistHistory = true {
     _messages.addAll(MiuAiHistoryStore.instance.recent
@@ -42,6 +44,7 @@ class MiuAiConversation extends ChangeNotifier {
     required int Function() lengthReader,
     String Function()? modelReader,
     String Function()? thinkingReader,
+    MiuPetPreferences? petPreferences,
     required MiuDeepSeekClient client,
   })  : _keyReader = keyReader,
         _enabledReader = enabledReader,
@@ -49,6 +52,7 @@ class MiuAiConversation extends ChangeNotifier {
         _lengthReader = lengthReader,
         _modelReader = modelReader ?? (() => 'deepseek-flash'),
         _thinkingReader = thinkingReader ?? (() => 'none'),
+        _petPreferences = petPreferences,
         _client = client,
         _persistHistory = false;
 
@@ -61,12 +65,16 @@ class MiuAiConversation extends ChangeNotifier {
   final int Function() _lengthReader;
   final String Function() _modelReader;
   final String Function() _thinkingReader;
+  final MiuPetPreferences? _petPreferences;
   final MiuDeepSeekClient _client;
   final bool _persistHistory;
   bool _busy = false;
+  bool _proactiveRequest = false;
+  int _proactiveEpoch = 0;
 
   List<MiuLocalMessage> get messages => List.unmodifiable(_messages);
   bool get busy => _busy;
+  bool get proactiveRequest => _proactiveRequest;
   bool get enabled => _enabledReader();
   bool get hasKey => _keyReader()?.isNotEmpty == true;
   String get persona => _personaReader();
@@ -74,13 +82,22 @@ class MiuAiConversation extends ChangeNotifier {
   String get thinking => normalizeMiuDeepSeekThinking(_thinkingReader());
   int get replyLength => _lengthReader().clamp(1, 3);
 
+  void invalidateProactive() => _proactiveEpoch++;
+
+  void refreshSettings() => notifyListeners();
+
+  String get _characterPersona =>
+      '${_personaReader()}\n${miuPetCharacterStyle(_petPreferences?.character ?? 'luna')}';
+
   Future<void> setModel(String value) async {
+    invalidateProactive();
     await bind.mainSetLocalOption(
         key: 'miu-ai-model', value: normalizeMiuDeepSeekModel(value));
     notifyListeners();
   }
 
   Future<void> setThinking(String value) async {
+    invalidateProactive();
     await bind.mainSetLocalOption(
         key: 'miu-ai-thinking', value: normalizeMiuDeepSeekThinking(value));
     notifyListeners();
@@ -94,11 +111,13 @@ class MiuAiConversation extends ChangeNotifier {
 
   Future<void> setPersona(String value) async {
     if (value.length > 1500) throw const FormatException('人设不能超过 1500 字');
+    invalidateProactive();
     await bind.mainSetLocalOption(key: 'miu-ai-persona', value: value.trim());
     notifyListeners();
   }
 
   Future<void> setKey(String key) async {
+    invalidateProactive();
     _credentials.write(key);
     await bind.mainSetLocalOption(key: 'miu-ai-enabled', value: 'Y');
     notifyListeners();
@@ -106,6 +125,7 @@ class MiuAiConversation extends ChangeNotifier {
 
   Future<void> setEnabled(bool value) async {
     if (value && !hasKey) throw StateError('请先设置 DeepSeek API Key');
+    invalidateProactive();
     await bind.mainSetLocalOption(
         key: 'miu-ai-enabled', value: value ? 'Y' : 'N');
     notifyListeners();
@@ -120,6 +140,7 @@ class MiuAiConversation extends ChangeNotifier {
   Future<void> send(String text) async {
     final prompt = text.trim();
     if (_busy || prompt.isEmpty) return;
+    _petPreferences?.refresh();
     final key = _keyReader();
     if (!enabled || key == null || key.isEmpty) {
       _messages.insert(
@@ -149,7 +170,7 @@ class MiuAiConversation extends ChangeNotifier {
       }
       answer.text = await _client.streamReply(
         apiKey: key,
-        persona: _personaReader(),
+        persona: _characterPersona,
         replyLength: _lengthReader(),
         model: model,
         thinking: thinking,
@@ -172,6 +193,63 @@ class MiuAiConversation extends ChangeNotifier {
     } finally {
       _busy = false;
       notifyListeners();
+    }
+  }
+
+  Future<String?> generateProactive() async {
+    final preferences = _petPreferences;
+    preferences?.refresh();
+    final key = _keyReader();
+    if (_busy || !enabled || key == null || key.isEmpty ||
+        preferences?.proactiveEnabled != true) return null;
+    final revision = preferences!.revision;
+    final epoch = _proactiveEpoch;
+    final persona = _characterPersona;
+    final selectedModel = model;
+    bool isCurrent() {
+      preferences.refresh();
+      return enabled && hasKey && preferences.proactiveEnabled &&
+          preferences.revision == revision && _proactiveEpoch == epoch &&
+          _characterPersona == persona && model == selectedModel;
+    }
+
+    final turns = <MiuAiTurn>[
+      for (final message in _messages.take(8).toList().reversed)
+        if (message.inContext && message.text.isNotEmpty)
+          MiuAiTurn(message.fromUser ? 'user' : 'assistant', message.text),
+      // This app-generated request is never stored as a user message.
+      const MiuAiTurn('user', '这是应用的定时陪伴请求，不是用户的新消息。'
+          '请按当前角色主动说一句很短的关怀或轻微吐槽，例如通用的喝水、休息提醒。'
+          '不要重复近期说过的话，不需要用户回答。'
+          '不要声称看到了屏幕、文件、操作、工作状态或身体情况。只输出这句话。'),
+    ];
+    _proactiveRequest = true;
+    _busy = true;
+    notifyListeners();
+    try {
+      final answer = compactMiuReply(await _client.streamReply(
+        apiKey: key,
+        persona: persona,
+        replyLength: 1,
+        model: selectedModel,
+        thinking: 'none',
+        turns: turns,
+        onPartial: (_) {},
+      ), 1);
+      if (!isCurrent() || answer.isEmpty ||
+          _messages.take(12).any((message) =>
+              !message.fromUser && message.text.trim() == answer)) return null;
+      _messages.insert(0, MiuLocalMessage(answer));
+      if (_persistHistory) {
+        await MiuAiHistoryStore.instance.add(answer, fromUser: false);
+      }
+      return isCurrent() ? answer : null;
+    } catch (_) {
+      return null;
+    } finally {
+      _busy = false;
+      notifyListeners();
+      _proactiveRequest = false;
     }
   }
 }
