@@ -34,7 +34,8 @@ function Read-Property([string]$Msi, [string]$Name) {
 }
 function Record-SystemPolicy([string]$Stage) {
     $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
-    $value = Get-ItemPropertyValue -LiteralPath $key -Name 'SoftwareSASGeneration' -ErrorAction SilentlyContinue
+    $entry = (Get-ItemProperty -LiteralPath $key).PSObject.Properties['SoftwareSASGeneration']
+    $value = if ($null -ne $entry) { $entry.Value } else { $null }
     $systemPolicy.Add([pscustomobject]@{stage=$Stage;name='SoftwareSASGeneration';present=($null -ne $value);value=$value})
 }
 function Run-Msi([string]$Package, [string]$Operation, [string]$Label) {
