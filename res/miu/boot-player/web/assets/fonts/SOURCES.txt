@@ -1,0 +1,56 @@
+Local font sources — Miu AI boot prototype
+
+Downloaded unchanged from the official Google Fonts repository, pinned revision:
+bd8f81ddb5c74d5c8897b36ad88b440266245103
+https://github.com/google/fonts/tree/bd8f81ddb5c74d5c8897b36ad88b440266245103
+
+Orbitron-Variable.ttf
+Family: Orbitron
+Normal style, weight axis 400–900
+Original path: ofl/orbitron/Orbitron[wght].ttf
+License: SIL Open Font License 1.1; see Orbitron-OFL.txt
+Copyright 2018 The Orbitron Project Authors
+https://github.com/theleagueof/orbitron
+
+JetBrainsMono-Variable.ttf
+Family: JetBrains Mono
+Normal style, weight axis 100–800
+Original path: ofl/jetbrainsmono/JetBrainsMono[wght].ttf
+License: SIL Open Font License 1.1; see JetBrainsMono-OFL.txt
+Copyright 2020 The JetBrains Mono Project Authors
+https://github.com/JetBrains/JetBrainsMono
+
+Filenames have been shortened; font bytes and internal family names are unchanged.
+Fonts are bundled locally with this prototype. They are not installed on Windows.
+SpaceGrotesk-Variable.ttf
+Family: Space Grotesk
+Normal style, weight axis 300–700
+Official catalog: https://fonts.google.com/specimen/Space+Grotesk
+Google Fonts revision: bd8f81ddb5c74d5c8897b36ad88b440266245103
+Original path: ofl/spacegrotesk/SpaceGrotesk[wght].ttf
+License: SIL Open Font License 1.1; see SpaceGrotesk-OFL.txt
+Copyright 2020 The Space Grotesk Project Authors
+https://github.com/floriankarsten/space-grotesk
+Downloaded unchanged; filename shortened only. Not installed on Windows.
+VarescodemoRegular-j9KZ7.ttf — PERSONAL PREVIEW ONLY
+Family: VarescoDEMO
+Style: Regular (static font; not a variable family)
+Designer: Say Studio / Nur Rohman
+Source page: https://www.fontspace.com/varesco-font-f170833
+Original download: https://get.fontspace.co/download/family/j6dj2/8dc119d54aad4fafa91e7bb46327c8cb/varesco-font.zip
+Original archive retained as varesco-font-original.zip.
+Bundled notice retained without edits as Varesco-DEMO-LICENSE.txt.
+FontSpace package info retained as Varesco-FontSpace-info.txt.
+Downloaded and reviewed: 2026-10-12.
+SHA256: 99C70B7C38C4C97687FE2BF6AF9EBBF57841A95E388928D9972CF1AA0F14686B
+
+The bundled notice permits personal use of this incomplete demo font.
+It requires a Corporate license for Corporate use and links the full commercial font:
+https://sayfont.com/product/varesco/
+https://saystudio.gumroad.com/l/varesco
+
+This copy is for the user's local private visual preview only. No commercial,
+webfont, app embedding or redistribution rights have been verified or purchased.
+Do not carry this demo TTF into A/B installers, public web hosting, or distributed
+commercial software without the appropriate license from its designer.
+No Windows font installation was performed. Original font bytes are unchanged.

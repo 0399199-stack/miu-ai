@@ -1,0 +1,193 @@
+@font-face{font-family:"Miu Logo";src:url("assets/fonts/VarescodemoRegular-j9KZ7.ttf") format("truetype");font-weight:400;font-display:block}
+@font-face{font-family:"Miu Display";src:url("assets/fonts/SpaceGrotesk-Variable.ttf") format("truetype");font-weight:300 700;font-display:block}
+@font-face{font-family:"Miu Mono";src:url("assets/fonts/JetBrainsMono-Variable.ttf") format("truetype");font-weight:100 800;font-display:block}
+:root{color-scheme:dark;--blue:#48aaff;--bright:#d5f0ff;--muted:#547e9a;--cyan:#61e7ff;--hair:rgba(65,168,245,.25);font-family:"Segoe UI","Microsoft YaHei",sans-serif;background:#010306;color:#c2e6f8}
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}button{font:inherit}button:focus-visible{outline:2px solid #9ce5ff;outline-offset:5px}
+#experience{position:relative;width:100%;height:100%;overflow:hidden;isolation:isolate;background:#010306}
+#experience:fullscreen{width:100vw;height:100vh}
+#desktop,#boot,#edgeGlow{position:absolute;inset:0;width:100%;height:100%}
+#desktop{overflow:hidden;background:#0b1931}
+.wallpaper{width:100%;height:100%;position:absolute;inset:0}
+.desktop-top{position:absolute;inset:6% 6.2% auto;display:flex;align-items:center;justify-content:space-between;color:#d6edff}
+.desktop-brand{font-size:clamp(22px,2.2vw,42px);font-weight:650;letter-spacing:-1.5px}
+.desktop-brand span{display:block;font:9px "Miu Mono",Consolas,monospace;letter-spacing:3px;margin-top:8px;color:#7eaccc}
+.simulation-tag{font:10px "Miu Mono",Consolas,monospace;letter-spacing:2px;color:#7eabc8}
+.desktop-welcome{position:absolute;left:13%;top:34%;color:#e5f3ff}
+.overline{font:clamp(8px,.75vw,14px) "Miu Mono",Consolas,monospace;letter-spacing:.23em;color:#6ca3c7}
+.desktop-welcome h1{font-size:clamp(32px,4.25vw,82px);font-weight:350;letter-spacing:.05em;margin:24px 0 16px}
+.desktop-welcome p{font-size:clamp(12px,1.1vw,21px);font-weight:300;color:#90acc7;letter-spacing:.1em}
+.desktop-status{display:flex;gap:12px;align-items:center;font:clamp(9px,.68vw,13px) "Miu Mono",Consolas,monospace;letter-spacing:.12em;margin-top:42px;color:#a5ddf2}
+.desktop-status i{width:6px;height:6px;border-radius:100%;background:#71e5d0;box-shadow:0 0 12px #40e7d4}
+.desktop-status span{border-left:1px solid #345067;padding-left:14px;font-family:"Segoe UI","Microsoft YaHei",sans-serif;letter-spacing:1px;color:#7797b4}
+.desktop-shortcuts{position:absolute;right:7%;bottom:17%;display:flex;gap:25px}
+.desktop-shortcuts>div{display:flex;flex-direction:column;gap:10px;align-items:center;color:#88a8c6;font-size:11px}
+.desktop-shortcuts b{display:grid;place-items:center;width:44px;height:44px;border:1px solid #6aa3ce44;border-radius:13px;color:#b5d9f8;background:linear-gradient(145deg,#79bdf721,#14355355);font-size:23px;font-weight:400}
+.mock-taskbar{position:absolute;bottom:0;left:0;right:0;height:7%;min-height:40px;background:#06142677;border-top:1px solid #b1d7ff13;backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;gap:22px;color:#a4cdef}
+.mock-start{display:grid;grid-template-columns:repeat(2,8px);gap:3px}
+.mock-start i{height:8px;background:#76caff}
+.mock-search{display:flex;gap:15px;align-items:center;font-size:22px;border:1px solid #6386af26;border-radius:6px;padding:3px 12px;background:#abcaff09}
+.mock-search span{font-size:10px;color:#7998b7}
+.mock-app{font-size:22px}
+.mock-app.blue{color:#6ebeff}
+.mock-clock{position:absolute;right:3%;font:12px "Miu Mono",Consolas,monospace;text-align:right}
+.mock-clock span{display:block;font-size:7px;color:#647f9e;letter-spacing:1px;margin-top:4px}
+#edgeGlow{z-index:2;pointer-events:none;opacity:0;will-change:opacity}
+#boot{z-index:3;overflow:hidden;background:#010306;will-change:opacity}
+.ambient{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,#155bad26 0,transparent 58%),radial-gradient(ellipse at 50% 110%,#075aaa18,transparent 65%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.12;background:repeating-linear-gradient(0deg,transparent,transparent 3px,#1774b92b 4px);mask-image:radial-gradient(ellipse,#0007,transparent 85%)}
+.boot-coordinate{position:absolute;z-index:2;font:clamp(8px,.62vw,12px) "Miu Mono",Consolas,monospace;letter-spacing:.14em;color:#40799c}
+.boot-coordinate span{margin-left:18px;color:#234458}
+.top-left{left:3.5%;top:4%}
+.top-right{right:3.5%;top:4%}
+.bottom-left{left:3.5%;bottom:4%}
+.bottom-right{right:3.5%;bottom:4%}
+.bottom-right i{display:inline-block;width:5px;height:5px;background:var(--blue);margin-left:10px;box-shadow:0 0 12px #268ffe}
+#hero{position:absolute;left:50%;top:46%;width:min(64vw,1160px);text-align:center;transform:translate(-50%,-50%);will-change:transform,opacity}
+.hero-kicker{color:#659aba;font:clamp(7px,.66vw,13px) "Miu Mono",Consolas,monospace;letter-spacing:.32em;margin-bottom:20px}
+#wordmark{width:100%;overflow:visible}
+.hero-baseline{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:8px}
+.hero-caption{font:clamp(8px,.75vw,14px) "Miu Mono",Consolas,monospace;letter-spacing:.37em;color:#78b6d9}
+.cursor{width:7px;height:13px;background:#8ce5ff}
+.hero-index{font:10px "Miu Mono",Consolas,monospace;letter-spacing:2px;margin-top:54px;color:#365b79}
+.hero-index span{margin:0 12px;color:#183345}
+#terminal{position:absolute;inset:11% 5.5% 12%;display:flex;flex-direction:column;gap:20px;opacity:0;visibility:hidden;font-family:"Miu Mono",Consolas,"Cascadia Mono",monospace;will-change:opacity,transform}
+.terminal-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;height:50px;border-bottom:1px solid var(--hair);padding-bottom:14px;font-size:clamp(9px,.76vw,15px);color:#619bc1;letter-spacing:.12em}
+.terminal-header>div{display:flex;align-items:center;gap:20px}
+.tiny-brand{font-family:"Miu Display",sans-serif;font-size:clamp(22px,1.9vw,36px);font-weight:550;letter-spacing:-.04em;color:#d3efff}
+.header-slash{font-size:27px;color:#315f80}
+.terminal-clock{font-size:clamp(10px,.9vw,17px);letter-spacing:.04em}
+.terminal-clock i{width:5px;height:5px;border-radius:50%;background:#77e7ff;box-shadow:0 0 12px #459aff;margin-left:10px}
+.terminal-grid{display:grid;grid-template-columns:1fr 1.7fr 1fr;gap:18px;flex:1;min-height:0}
+.panel-stack{display:grid;gap:18px;min-height:0;grid-template-rows:1.22fr 1fr}
+.right-stack{grid-template-rows:1.12fr 1fr}
+.panel{position:relative;min-height:0;overflow:hidden;border:1px solid #2a7eb150;background:linear-gradient(135deg,#2278b812,#09213922);box-shadow:inset 0 0 50px #199ada12;display:flex;flex-direction:column;transform-origin:50% 50%;will-change:transform,opacity}
+.panel:before,.panel:after{content:"";position:absolute;width:9px;height:9px;z-index:1;pointer-events:none}
+.panel:before{left:-1px;top:-1px;border-top:1px solid #75dfff;border-left:1px solid #75dfff}
+.panel:after{right:-1px;bottom:-1px;border-right:1px solid #3c95c0;border-bottom:1px solid #3c95c0}
+.panel>header{height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #276b9844;padding:0 15px;font-size:clamp(8px,.61vw,12px);letter-spacing:.055em;color:#7bc5ec;background:#287ab01a}
+.panel>header b{font-size:clamp(7px,.52vw,10px);font-weight:400;color:#4383a5;letter-spacing:1px}
+.modules{padding:8px 16px;display:flex;flex:1;flex-direction:column;justify-content:space-evenly;gap:8px;min-height:0}
+.module-row{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:clamp(9px,.73vw,14px);color:#9ac4dc}
+.module-row small{color:#3c6486;font-size:clamp(8px,.58vw,11px)}
+.module-row.complete small{color:var(--cyan)}
+.module-track{grid-column:1/-1;height:3px;background:#267cbb22}
+.module-track i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,#164177,#61c7ff);box-shadow:0 0 7px #249efc65}
+.panel-foot{display:flex;justify-content:space-between;padding:11px 15px;border-top:1px solid #207bb432;font-size:clamp(7px,.51vw,10px);letter-spacing:.08em;color:#3c6c8e}
+.panel-foot span{color:#629cc0}
+.wave-panel canvas{display:block;width:100%;flex:1;min-height:0}
+.wave-metrics{display:flex;justify-content:space-between;padding:12px 16px;font-size:clamp(8px,.62vw,12px);color:#3c6c8e}
+.wave-metrics b{font-weight:400;color:#8cc2de;margin-left:5px}
+.core-visual{position:relative;flex:1;min-height:80px;overflow:hidden}
+.core-visual canvas{position:absolute;inset:0;width:100%;height:100%}
+.core-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.core-label>span{font:650 clamp(28px,2.6vw,50px) "Miu Display",sans-serif;letter-spacing:-.035em;white-space:nowrap;color:#d7f4ff;text-shadow:0 0 26px #359dff55}
+.core-label small{display:block;white-space:nowrap;color:#518cb6;font-size:clamp(7px,.52vw,10px);letter-spacing:.14em;margin-top:12px}
+.core-corner{position:absolute;bottom:12px;left:16px;font-size:clamp(7px,.51vw,10px);color:#254762}
+.core-corner b{font-weight:400;margin-left:10px;color:#64baff}
+.log-heading{display:flex;justify-content:space-between;padding:11px 17px;background:#2077bc20;border-top:1px solid #327dab38;border-bottom:1px solid #327dab38;color:#5c9fce;font-size:clamp(7px,.54vw,11px);letter-spacing:.12em}
+.logs{height:27%;flex-shrink:0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;padding:10px 17px;gap:7px;font-size:clamp(9px,.65vw,13px);line-height:1.3;color:#90b5d0}
+.log{display:grid;grid-template-columns:56px 1fr auto;gap:9px}
+.log time{color:#3d637e}
+.log b{font-weight:400;color:#4ecddb;font-size:.9em}
+.log:last-child{color:#bde9ff}
+.master-progress{padding:16px 17px 20px;border-top:1px solid #327dab38}
+.master-progress>div:first-child{display:flex;justify-content:space-between;font-size:clamp(8px,.6vw,12px);letter-spacing:.11em;color:#6c9bbf}
+.master-progress b{font-weight:400;color:#85deff}
+.master-track{margin-top:11px;height:6px;background:#258fce1d}
+.master-track i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:left;background:repeating-linear-gradient(90deg,#54baff 0,#54baff 4px,transparent 4px,transparent 6px);box-shadow:0 0 10px #178efa45}
+.recipe{flex:1;padding:8px 12px;overflow:hidden;font-size:clamp(7px,.60vw,11px);line-height:1.35;white-space:pre;color:#8ec2e2}
+.recipe>div{display:flex;gap:11px}
+.recipe i{font-style:normal;color:#2f5875;min-width:15px;text-align:right}
+.recipe .blue{color:#65e3ea}
+.recipe .gold{color:#81cfff}
+.recipe .dim{color:#437596}
+.terminal-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#4b86ac;font-size:clamp(7px,.56vw,11px);letter-spacing:.08em;padding-top:2px}
+.terminal-footer i{display:inline-block;width:4px;height:4px;border-radius:50%;background:#69ceff;margin-right:7px}
+.terminal-footer>span:nth-child(2){color:#305879}
+#ready{z-index:4;background:transparent;position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;pointer-events:none;text-align:center}
+.ready-kicker{font:clamp(8px,.69vw,13px) "Miu Mono",Consolas,monospace;letter-spacing:.3em;color:#74afd6}
+#ready h2{display:flex;align-items:center;justify-content:center;gap:30px;font-family:"Miu Display",sans-serif;font-size:clamp(50px,6.4vw,122px);letter-spacing:-.045em;font-weight:700;color:#e5f6ff;text-shadow:0 3px 35px #05152799;margin:22px 0 26px;line-height:1.1}
+#ready h2 .ready-brand{color:#e5f6ff}
+#ready h2 .ready-status{font:700 clamp(22px,2.8vw,52px) "Miu Display",sans-serif;letter-spacing:.09em;border-left:1px solid #84c7e96b;padding:14px 0 14px 30px;color:#98dbff}
+.ready-rule{width:90px;height:1px;background:linear-gradient(90deg,transparent,#69d9ff,transparent)}
+#ready p{font-size:clamp(14px,1.25vw,24px);font-weight:500;letter-spacing:.12em;color:#a0c7e2;margin-top:24px}
+#lightSweep{z-index:4;position:absolute;left:50%;top:50%;width:10vmin;height:10vmin;transform:translate(-50%,-50%) scale(0);border-radius:50%;background:radial-gradient(ellipse,transparent 56%,#aedcff08 60%,#95cfff35 65%,#c6e8ff14 70%,transparent 74%);opacity:0;pointer-events:none;will-change:transform,opacity}
+.controls{position:absolute;bottom:9%;left:50%;transform:translateX(-50%);z-index:10;min-width:570px;text-align:center;transition:opacity .18s ease;color:#aedafa}
+.control-copy{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.control-copy strong{font-size:13px;font-weight:500;letter-spacing:2px}
+.control-copy>span{font-size:11px;color:#5e8cae;letter-spacing:1px}
+.control-actions{display:flex;gap:9px;justify-content:center}
+.control-actions button{border:1px solid #3984ad50;background:#288acc16;color:#7ea9c7;border-radius:7px;padding:10px 21px;cursor:pointer;font-size:12px;transition:background .2s,border-color .2s}
+.control-actions button:hover{background:#3196e42f;border-color:#6bc6ffaa;color:#d1f1ff}
+.control-actions button.primary{background:#81d9ff;color:#092442;border:1px solid #b3ebff;padding:10px 24px;font-weight:600;box-shadow:0 0 30px #55c8ff33}
+.control-actions button.primary:hover{background:#b5eaff}
+.control-actions button.primary span{margin-right:6px}
+.key-hint{display:block;margin-top:13px;font-size:10px;color:#3d627e}body[data-state="playing"]{cursor:none}body[data-state="playing"] .controls,body[data-state="playing"] #error{display:none!important}body[data-state="playing"] #experience,body[data-state="playing"] #experience *{cursor:none!important}body[data-state="finished"] .controls{bottom:11%;min-width:0;width:max-content;padding:15px 22px;border:1px solid #9ccaff25;border-radius:15px;background:#051328a1;backdrop-filter:blur(24px)}body[data-state="finished"] .control-copy{margin-bottom:13px}body[data-state="finished"] .control-copy strong{color:#b3d1eb}body[data-state="finished"] .control-copy>span{color:#7498b8}body[data-state="finished"] .control-actions button{color:#a2c5e4;border-color:#719aba44;background:#6eabdb0a}body[data-state="finished"] .control-actions button.primary{color:#d7eeff;background:#366a9544;border-color:#8ac5f366}body[data-state="finished"] .key-hint{display:none}body[data-state="finished"] #skip{display:none}
+#error{position:absolute;bottom:3%;left:20%;right:20%;z-index:12;color:#9adcff;text-align:center;font-size:12px}
+@media(max-height:700px){#terminal{inset:10% 5% 10%;gap:12px}
+.terminal-header{height:40px;padding-bottom:9px}
+.terminal-grid,.panel-stack{gap:12px}
+.panel>header{height:31px}
+.recipe{padding:8px 10px;line-height:1.4}
+.modules{padding:5px 12px;gap:6px}
+.panel-foot{padding:8px 12px}
+.master-progress{padding:10px 14px 13px}
+.log{grid-template-columns:45px 1fr auto;gap:7px}
+.logs{gap:5px;padding:8px 13px}
+.hero-index{margin-top:26px}
+.controls{bottom:7%}
+.control-copy{margin-bottom:12px}
+.desktop-status{margin-top:26px}}
+@media(max-width:850px){.top-right span{display:none}
+#terminal{inset:11% 3% 11%}
+.terminal-header>div{gap:10px}
+.terminal-grid{grid-template-columns:.9fr 1.6fr 1fr;gap:8px}
+.panel-stack{gap:8px}
+.panel>header{padding:0 8px;letter-spacing:0}
+.panel>header b{display:none}
+.modules{padding:5px 9px}
+.panel-foot{font-size:6px;padding:7px 8px}
+.module-row{font-size:8px}
+.recipe{font-size:7px;padding:10px 7px}
+.recipe>div{gap:6px}
+.logs{font-size:8px;padding:8px 9px}
+.log{grid-template-columns:36px 1fr auto;gap:5px}
+.terminal-footer>span:nth-child(2){display:none}
+.controls{min-width:0;width:90%}
+.hero-kicker{font-size:6px}
+.hero-caption{font-size:7px}
+.hero-index{font-size:8px}
+.desktop-shortcuts{display:none}
+.simulation-tag{font-size:7px}
+.desktop-welcome{left:10%}
+.desktop-status{font-size:7px}
+.desktop-status span{font-size:8px}
+.mock-search span{font-size:8px}}
+
+#experience:fullscreen .controls,#experience:fullscreen #error{display:none!important}
+
+.theme-controls{position:absolute;z-index:10;right:3.5%;top:9%;width:238px;padding:15px 16px;border:1px solid #6cb9ec33;border-radius:12px;background:#08172be8;color:#acd1ea;font-size:11px}
+.theme-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}
+.theme-heading b{font-weight:400;color:#628ca8;font-size:10px}
+.theme-presets{display:flex;justify-content:space-between;gap:7px}
+.theme-presets button{width:24px;height:24px;flex-shrink:0;border-radius:50%;border:3px solid #0b1b30;background:var(--swatch);cursor:pointer;outline:1px solid transparent;transition:outline-color .2s,transform .2s}
+.theme-presets button:hover{transform:translateY(-2px)}
+.theme-presets button[aria-pressed="true"]{outline-color:#d4f0ff}
+.theme-custom{display:flex;gap:9px;align-items:center;margin-top:14px;color:#789cb7;cursor:pointer}
+.theme-custom span{margin-left:auto;font:9px "Miu Mono",monospace;color:#577b96}
+.theme-custom input{width:22px;height:22px;padding:0;border:0;background:transparent;cursor:pointer}
+body[data-state="playing"] #themeControls,#experience:fullscreen #themeControls{display:none!important}
+@media(max-height:700px){.theme-controls{top:8%;padding:10px 13px}.theme-heading{margin-bottom:8px}.theme-custom{margin-top:8px}}
+
+/* Exact Varesco outlines; vector tracing keeps letter proportions intact. */
+#wordmark{position:relative;width:100%;height:clamp(160px,20vw,350px)}
+#wordmarkSvg{display:block;width:100%;height:100%;overflow:visible;transform:scale(.6);transform-origin:center}
+.logo-trace{stroke-dasharray:1;stroke-dashoffset:1}
+#logoOutline{filter:drop-shadow(0 0 4px #3ebaff88)}
+#logoFill,#logoHighlight{opacity:0}
+.stream-viewport{position:relative;flex:1;min-height:0;overflow:hidden;background:linear-gradient(180deg,#04101e33,#11385722);mask-image:linear-gradient(transparent,#000 12%,#000 100%)}
+#codeStream{position:absolute;inset:0;width:100%;height:100%}
+.stream-footer{display:flex;align-items:center;gap:8px;padding:10px 15px 13px;font:clamp(7px,.53vw,10px) "Miu Mono",monospace;letter-spacing:.04em;color:#629ac2}
+.stream-footer i{width:4px;height:4px;border-radius:50%;background:var(--cyan)}
+.stream-footer b{font-weight:400;color:#9fdcfa;margin-left:auto}
+@media(max-width:850px){#ready h2{gap:18px}#ready h2 .ready-status{padding-left:18px}.stream-footer{padding:8px;font-size:6px}}

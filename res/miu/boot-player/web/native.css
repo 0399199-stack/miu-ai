@@ -1,0 +1,4 @@
+html, body, #experience { background: transparent; }
+#desktop, #edgeGlow, #controls, #themeControls, #error, #ready, #lightSweep { display: none !important; }
+body { cursor: none; }
+body[data-state="idle"] #hero { visibility: hidden; }

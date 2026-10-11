@@ -26,6 +26,7 @@ import '../desktop/widgets/miu_ai_credentials.dart';
 import '../desktop/widgets/miu_ai_chat.dart';
 import '../desktop/widgets/miu_ai_history.dart';
 import '../desktop/widgets/miu_pet_preferences.dart';
+import '../desktop/widgets/miu_boot_player.dart';
 import '../main.dart';
 import 'model.dart';
 
@@ -123,6 +124,8 @@ class ChatModel with ChangeNotifier {
   String? _miuPetAiThinking;
   String? _miuPetCharacter;
   bool? _miuPetProactiveEnabled;
+  MiuBootSettings? _miuBootSettings;
+  bool? _miuBootAvailable;
   List<MiuAiHistoryEntry> _miuAiHistory = [];
   int _miuHistoryEpoch = 0;
 
@@ -134,6 +137,8 @@ class ChatModel with ChangeNotifier {
   String? get miuPetAiThinking => _miuPetAiThinking;
   String? get miuPetCharacter => _miuPetCharacter;
   bool? get miuPetProactiveEnabled => _miuPetProactiveEnabled;
+  MiuBootSettings? get miuBootSettings => _miuBootSettings;
+  bool? get miuBootAvailable => _miuBootAvailable;
   List<MiuAiHistoryEntry> get miuAiHistory => List.unmodifiable(_miuAiHistory);
 
   int miuUnreadCount(MessageKey key) => _miuUnread[key] ?? 0;
@@ -523,6 +528,12 @@ class ChatModel with ChangeNotifier {
       if (!session.ffiModel.miuPeerAuthenticated || action != 'result') return;
       final pending = _miuPendingControls.remove(requestId);
       if (pending == null) return;
+      final bootSettings = MiuBootSettings.parse(data['bootSettings']);
+      if (bootSettings != null && data['bootAvailable'] is bool) {
+        _miuBootSettings = bootSettings;
+        _miuBootAvailable = data['bootAvailable'] as bool;
+        notifyListeners();
+      }
       if (data['visible'] is bool) {
         _miuPetVisible = data['visible'] as bool;
         notifyListeners();
@@ -560,7 +571,13 @@ class ChatModel with ChangeNotifier {
         client.isTerminal ||
         client.portForward.isNotEmpty) return;
     var ok = false;
-    if (action == 'pet-state') {
+    final bootAction = action == 'boot-state' || action == 'boot-settings' ||
+        action == 'boot-play';
+    if (bootAction) {
+      final player = MiuBootPlayer.instance;
+      ok = action == 'boot-state' ? true : action == 'boot-settings'
+          ? await player.save(data['value']) : await player.play();
+    } else if (action == 'pet-state') {
       ok = true;
     } else if (action == 'pet-visible' && data['value'] is bool) {
       session.serverModel.setMiuPetVisible(data['value'] as bool);
@@ -629,6 +646,8 @@ class ChatModel with ChangeNotifier {
     } else {
       return;
     }
+    final bootAvailable = bootAction && action != 'boot-play'
+        ? await MiuBootPlayer.instance.available() : null;
     if (clients.any((current) =>
         current.id == id && current.authorized && !current.disconnected)) {
       final result = <String, dynamic>{
@@ -637,6 +656,10 @@ class ChatModel with ChangeNotifier {
         'ok': ok,
         'visible': session.serverModel.miuPetVisible,
       };
+      if (bootAvailable != null) {
+        result['bootAvailable'] = bootAvailable;
+        result['bootSettings'] = MiuBootPlayer.instance.settings.toJson();
+      }
       if (action == 'pet-state' || action == 'pet-visible' ||
           action == 'pet-preferences' || action == 'ai-state' ||
           action == 'ai-settings') {
@@ -732,6 +755,22 @@ class ChatModel with ChangeNotifier {
 
   Future<void> refreshMiuPetVisible() async {
     await _requestMiuControl('pet-state', null);
+  }
+
+  Future<void> refreshMiuBootSettings() async {
+    await _requestMiuControl('boot-state', null);
+  }
+
+  Future<bool> setMiuBootSettings(MiuBootSettings settings) async {
+    final result = await _requestMiuControl('boot-settings', settings.toJson());
+    final actual = MiuBootSettings.parse(result?['bootSettings']);
+    return result?['ok'] == true && actual?.color == settings.color &&
+        actual?.autoPlay == settings.autoPlay;
+  }
+
+  Future<bool> playMiuBoot() async {
+    final result = await _requestMiuControl('boot-play', null);
+    return result?['ok'] == true;
   }
 
   Future<bool> setMiuPetVisible(bool visible) async {
@@ -852,6 +891,8 @@ class ChatModel with ChangeNotifier {
   }
 
   void resetMiuControlState() {
+    _miuBootSettings = null;
+    _miuBootAvailable = null;
     _miuPetVisible = null;
     _miuPetAiEnabled = null;
     _miuPetPersona = null;

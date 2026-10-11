@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Miu AI · Boot Experience</title>
+  <link rel="stylesheet" href="demo.css">
+  <link rel="stylesheet" href="native.css">
+</head>
+<body data-state="idle">
+  <main id="experience" aria-label="Miu AI 开机欢迎动画演示">
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute;pointer-events:none">
+      <defs><filter id="bootRedTint" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="0 0 1 0 0  4 0 0 0 -3  4 0 0 0 -3  0 0 0 1 0"/>
+      </filter></defs>
+    </svg>
+    <section id="desktop" aria-label="模拟桌面">
+      <svg class="wallpaper" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <radialGradient id="sky"><stop stop-color="#153c67"/><stop offset="1" stop-color="#050f23"/></radialGradient>
+          <linearGradient id="ribbon" x1="0" x2=".7" y2="1"><stop stop-color="#8cd7ff"/><stop offset=".35" stop-color="#2465b2"/><stop offset=".75" stop-color="#0b254a"/><stop offset="1" stop-color="#27456c"/></linearGradient>
+          <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bedfed"/><stop offset=".35" stop-color="#35567e"/><stop offset="1" stop-color="#0a1a36"/></linearGradient>
+          <linearGradient id="rim"><stop stop-color="#78cfff" stop-opacity="0"/><stop offset=".5" stop-color="#a2dfff" stop-opacity=".8"/><stop offset="1" stop-color="#78cfff" stop-opacity="0"/></linearGradient>
+        </defs>
+        <path fill="url(#sky)" d="M0 0H1920V1080H0Z"/>
+        <g transform="translate(70 -30) rotate(-14 1000 600)">
+          <path fill="url(#ribbon)" d="M490 1230C570 940 1270 880 1400 570S1170 130 1550-120H1810C1380 140 1780 370 1550 740S820 1010 750 1260Z"/>
+          <path fill="url(#silver)" d="M780 1250C900 900 1490 720 1295 430S1160 80 1350-130H1510C1250 110 1380 150 1480 360S1520 740 1160 1000L1060 1240Z"/>
+          <path fill="none" stroke="url(#rim)" stroke-width="2" d="M490 1230C570 940 1270 880 1400 570S1170 130 1550-120M780 1250C900 900 1490 720 1295 430S1160 80 1350-130"/>
+        </g>
+      </svg>
+      <div class="desktop-top"><span class="desktop-brand">Miu AI<span>PERSONAL SPACE</span></span><span class="simulation-tag">模拟桌面 / LOCAL DEMO</span></div>
+      <div class="desktop-welcome"><div class="overline">A LITTLE SMARTER. A LITTLE CLOSER.</div><h1>你好，新的灵感。</h1><p>Miu 已就绪，陪你开始今天。</p><div class="desktop-status"><i></i> MIU AI · READY <span>呼吸光已开启</span></div></div>
+      <div class="desktop-shortcuts" aria-hidden="true"><div><b>▧</b><span>工作空间</span></div><div><b>⌘</b><span>消息</span></div><div><b>✦</b><span>Miu AI</span></div></div>
+      <div class="mock-taskbar" aria-label="模拟桌面任务栏"><span class="mock-start"><i></i><i></i><i></i><i></i></span><span class="mock-search">⌕ <span>新的想法，从这里开始</span></span><span class="mock-app">▣</span><span class="mock-app blue">▰</span><span class="mock-app">✦</span><div class="mock-clock">09:41<span>MIU PERSONAL SPACE</span></div></div>
+    </section>
+    <canvas id="edgeGlow" aria-hidden="true"></canvas>
+    <section id="boot" aria-label="欢迎动画">
+      <div class="ambient" aria-hidden="true"></div><div class="grain" aria-hidden="true"></div>
+      <div class="boot-coordinate top-left">MIU / PERSONAL INTELLIGENCE</div><div class="boot-coordinate top-right">SEQUENCE 001 <span>LOCAL VISUAL DEMO</span></div>
+      <div id="hero">
+        <div class="hero-kicker">AN INTELLIGENCE, WITH A LITTLE SOUL.</div>
+        <div id="wordmark" role="img" aria-label="Varesco 字体 Miu AI，发光描边逐渐成形">
+          <svg id="wordmarkSvg" viewBox="-24 -20 590 192" aria-hidden="true">
+  <defs>
+    <linearGradient id="logoInk" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#effbff"/><stop offset=".48" stop-color="#bfeaff"/><stop offset="1" stop-color="#55b6ff"/></linearGradient>
+    <linearGradient id="logoSheen" gradientUnits="userSpaceOnUse" x1="-90" y1="0" x2="90" y2="0"><stop stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <g id="logoShape"><path id="logo-contour-0" pathLength="1" d="M421.213,55.269L411.496,96 430.93,96 421.213,55.269z"/><path id="logo-contour-1" pathLength="1" d="M201.043,50L233.043,50 233.043,100C233.043,107.067 234.31,112.7 236.843,116.9 239.376,121.1 242.776,123.2 247.043,123.2L247.643,123.2C252.176,123.2 255.81,121.1 258.543,116.9 261.276,112.7 262.643,107.067 262.643,100L262.643,50 294.643,50 294.643,150 262.643,150 262.643,138.624 260.881,140.95C258.306,144 255.393,146.45 252.143,148.3 247.81,150.767 242.976,152 237.643,152L236.443,152C231.11,152 226.276,150.767 221.943,148.3 217.61,145.833 213.91,142.3 210.843,137.7 207.776,133.1 205.376,127.6 203.643,121.2 201.91,114.8 201.043,107.733 201.043,100L201.043,50z"/><path id="logo-contour-2" pathLength="1" d="M153.043,50L185.043,50 185.043,150 153.043,150 153.043,50z"/><path id="logo-contour-3" pathLength="1" d="M491.766,10L527.766,10 527.766,150 491.766,150 491.766,10z"/><path id="logo-contour-4" pathLength="1" d="M390.613,10L410.413,10 432.013,10 447.813,10 481.213,150 443.813,150 438.755,128.8 403.671,128.8 398.613,150 357.213,150 390.613,10z"/><path id="logo-contour-5" pathLength="1" d="M7,10L13.6,10 72,67 130.4,10 137,10 137,150 101,150 101,83.4 72.8,111 71.2,111 43,83.4 43,150 7,150 7,10z"/><path id="logo-contour-6" pathLength="1" d="M169.043,-0C174.51,0 178.876,1.633 182.143,4.9 185.41,8.167 187.043,12.533 187.043,18 187.043,23.467 185.41,27.833 182.143,31.1 178.876,34.367 174.51,36 169.043,36 163.576,36 159.21,34.367 155.943,31.1 152.676,27.833 151.043,23.467 151.043,18 151.043,12.533 152.676,8.167 155.943,4.9 159.21,1.633 163.576,0 169.043,-0z"/></g>
+  <path id="logoSolid" fill-rule="evenodd" d="M421.213,55.269L411.496,96 430.93,96 421.213,55.269z M201.043,50L233.043,50 233.043,100C233.043,107.067 234.31,112.7 236.843,116.9 239.376,121.1 242.776,123.2 247.043,123.2L247.643,123.2C252.176,123.2 255.81,121.1 258.543,116.9 261.276,112.7 262.643,107.067 262.643,100L262.643,50 294.643,50 294.643,150 262.643,150 262.643,138.624 260.881,140.95C258.306,144 255.393,146.45 252.143,148.3 247.81,150.767 242.976,152 237.643,152L236.443,152C231.11,152 226.276,150.767 221.943,148.3 217.61,145.833 213.91,142.3 210.843,137.7 207.776,133.1 205.376,127.6 203.643,121.2 201.91,114.8 201.043,107.733 201.043,100L201.043,50z M153.043,50L185.043,50 185.043,150 153.043,150 153.043,50z M491.766,10L527.766,10 527.766,150 491.766,150 491.766,10z M390.613,10L410.413,10 432.013,10 447.813,10 481.213,150 443.813,150 438.755,128.8 403.671,128.8 398.613,150 357.213,150 390.613,10z M7,10L13.6,10 72,67 130.4,10 137,10 137,150 101,150 101,83.4 72.8,111 71.2,111 43,83.4 43,150 7,150 7,10z M169.043,-0C174.51,0 178.876,1.633 182.143,4.9 185.41,8.167 187.043,12.533 187.043,18 187.043,23.467 185.41,27.833 182.143,31.1 178.876,34.367 174.51,36 169.043,36 163.576,36 159.21,34.367 155.943,31.1 152.676,27.833 151.043,23.467 151.043,18 151.043,12.533 152.676,8.167 155.943,4.9 159.21,1.633 163.576,0 169.043,-0z"/></defs>
+  <use id="logoFill" href="#logoSolid" fill="url(#logoInk)" fill-rule="evenodd"/>
+  <g id="logoOutline" fill="none" stroke="#9be7ff" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"><use class="logo-trace" href="#logo-contour-0"/><use class="logo-trace" href="#logo-contour-1"/><use class="logo-trace" href="#logo-contour-2"/><use class="logo-trace" href="#logo-contour-3"/><use class="logo-trace" href="#logo-contour-4"/><use class="logo-trace" href="#logo-contour-5"/><use class="logo-trace" href="#logo-contour-6"/></g>
+  <use id="logoHighlight" href="#logoSolid" fill="url(#logoSheen)" fill-rule="evenodd"/>
+</svg>
+        </div>
+        <div class="hero-baseline"><span class="hero-caption">DESIGNED TO BE WITH YOU</span><span class="cursor"></span></div>
+        <div class="hero-index">01 <span>/</span> AWAKEN</div>
+      </div>
+      <section id="terminal" aria-label="虚构的模块启动演出">
+        <header class="terminal-header"><div><span class="tiny-brand">Miu AI</span><span class="header-slash">/</span><span>INITIALIZATION SEQUENCE</span></div><div class="terminal-clock">T+<span id="timecode">00.000</span><i></i></div></header>
+        <div class="terminal-grid">
+          <div class="panel-stack left-stack">
+            <article class="panel" data-enter="4.4"><header><span>01 / MODULE ARRAY</span><b>CORE</b></header><div class="modules" id="modules"></div><div class="panel-foot">LOCAL RENDER PIPELINE <span>6 CHANNELS</span></div></article>
+            <article class="panel wave-panel" data-enter="5.4"><header><span>02 / SIGNAL ENVELOPE</span><b>SYNC</b></header><canvas id="wave" aria-hidden="true"></canvas><div class="wave-metrics"><span>PHASE <b id="phase">0.00</b></span><span>AMPLITUDE <b>0.84</b></span></div></article>
+          </div>
+          <article class="panel main-panel" data-enter="4.1"><header><span>03 / MIU ORCHESTRATOR</span><b>BOOT.LOG</b></header><div class="core-visual"><canvas id="core" aria-hidden="true"></canvas><div class="core-label"><span>Miu AI</span><small id="coreState">ASSEMBLING EXPERIENCE</small></div><div class="core-corner">RENDER GRAPH <b>R / 001</b></div></div><div class="log-heading"><span>EVENT STREAM</span><span id="logCount">00 ENTRIES</span></div><div id="logs" class="logs"></div><div class="master-progress"><div><span>EXPERIENCE ASSEMBLY</span><b id="percent">0%</b></div><div class="master-track"><i id="progress"></i></div></div></article>
+          <div class="panel-stack right-stack">
+            <article class="panel code-panel" data-enter="4.8"><header><span>04 / SCENE RECIPE</span><b>VISUAL</b></header><div id="recipe" class="recipe"></div><div class="panel-foot">DECLARATIVE PREVIEW <span>NO EXECUTION</span></div></article>
+            <article class="panel stream-panel" data-enter="5.8"><header><span>05 / CODE STREAM</span><b id="streamCount">0000 LINES</b></header><div class="stream-viewport"><canvas id="codeStream" aria-label="高速滚动的虚构代码演出"></canvas></div><div class="stream-footer"><i></i><span>MIU VISUAL RUNTIME</span><b id="streamState">STAGED</b></div></article>
+          </div>
+        </div>
+        <footer class="terminal-footer"><span><i></i> VISUAL SIMULATION / 演出画面</span><span>NO COMMANDS · NO USER DATA</span><span id="stageLabel">PREPARING THE EXPERIENCE</span></footer>
+      </section>
+      <div class="boot-coordinate bottom-left">MIU BOOT EXPERIENCE <span>PROTOTYPE / 01</span></div><div class="boot-coordinate bottom-right"><span id="sequenceLabel">AWAITING YOUR SIGNAL</span> <i></i></div>
+    </section>
+    <div id="ready"><div class="ready-kicker">EVERYTHING IN ITS PLACE.</div><h2><span class="ready-brand">Miu AI</span><span class="ready-status">READY</span></h2><div class="ready-rule"></div><p>Miu AI已就绪，陪你开始今天</p></div>
+    <div id="lightSweep" aria-hidden="true"></div>
+    <aside id="themeControls" class="theme-controls" aria-label="开机动画颜色">
+      <div class="theme-heading"><span>开机动画颜色</span><b id="themeName">冰蓝</b></div>
+      <div class="theme-presets">
+        <button type="button" data-color="#48AAFF" data-name="冰蓝" style="--swatch:#48AAFF" aria-label="冰蓝" title="冰蓝"></button>
+        <button type="button" data-color="#FF0000" data-name="大红" style="--swatch:#FF0000" aria-label="大红" title="大红"></button>
+        <button type="button" data-color="#A56CFF" data-name="星紫" style="--swatch:#A56CFF" aria-label="星紫" title="星紫"></button>
+        <button type="button" data-color="#38E8CE" data-name="青绿" style="--swatch:#38E8CE" aria-label="青绿" title="青绿"></button>
+        <button type="button" data-color="#FFD166" data-name="鎏金" style="--swatch:#FFD166" aria-label="鎏金" title="鎏金"></button>
+        <button type="button" data-color="#FFFFFF" data-name="银白" style="--swatch:#FFFFFF" aria-label="银白" title="银白"></button>
+      </div>
+      <label class="theme-custom">自定义颜色 <span id="themeHex">#48AAFF</span><input id="themeColor" type="color" value="#48aaff" aria-label="自定义开机动画颜色"></label>
+    </aside>
+    <div id="controls" class="controls">
+      <div class="control-copy"><strong id="controlTitle">Miu AI · 开机欢迎动画</strong><span id="controlHint">17 秒沉浸预览 · 科技终端 → 四边呼吸光</span></div>
+      <div class="control-actions"><button id="fullscreenPlay" class="primary" type="button" disabled><span aria-hidden="true">⛶</span> 全屏播放</button><button id="play" type="button" disabled>播放</button><button id="skip" type="button">跳过</button></div>
+      <span class="key-hint">播放中按 Esc 跳过</span>
+    </div>
+    <div id="error" role="status" aria-live="polite"></div>
+  </main>
+  <script src="theme.js"></script>
+  <script src="demo.js"></script>
+  <script src="native.js"></script>
+</body>
+</html>

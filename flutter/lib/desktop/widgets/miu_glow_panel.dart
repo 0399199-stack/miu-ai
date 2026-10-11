@@ -5,6 +5,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'miu_toolbar_surface.dart';
+import 'miu_boot_controls.dart';
 
 class MiuGlowPanel extends StatefulWidget {
   const MiuGlowPanel({super.key, required this.ffi, required this.onClose,
@@ -145,6 +146,8 @@ class _MiuGlowPanelState extends State<MiuGlowPanel> {
           } : null),
         const Divider(),
         Row(children: [const Expanded(child: Text('文字显示')), widget.textControls]),
+        const Divider(),
+        MiuBootControls(ffi: widget.ffi),
       ]);
     },
   );

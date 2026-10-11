@@ -91,6 +91,10 @@ jobs:
         working-directory: flutter
         run: flutter test --timeout 60s test/miu_ai_conversation_test.dart test/miu_deepseek_client_test.dart test/miu_ai_credentials_test.dart test/miu_pet_host_test.dart test/miu_pet_proactive_test.dart test/miu_control_path_test.dart test/miu_cm_lifecycle_test.dart test/miu_ai_history_test.dart
 
+      - name: Verify Miu boot preferences
+        working-directory: flutter
+        run: flutter test --timeout 60s test/miu_boot_player_test.dart test/miu_boot_controls_test.dart
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
@@ -146,6 +150,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Miu overlay compilation failed' }
           if (-not (Test-Path ./rustdesk/MiuOverlay.exe)) { throw 'Miu overlay executable missing' }
 
+      - name: Build Miu welcome player into distribution directory
+        shell: pwsh
+        run: |
+          dotnet build ./res/miu/boot-player/MiuBoot.csproj -c Release --nologo -o ./rustdesk/MiuBoot
+          if ($LASTEXITCODE -ne 0) { throw 'Miu welcome player compilation failed' }
+
       - name: Add upstream virtual display files
         shell: pwsh
         run: |
@@ -166,6 +176,9 @@ jobs:
         run: |
           foreach ($file in './rustdesk/MiuAI.exe','./rustdesk/librustdesk.dll','./rustdesk/MiuOverlay.exe','./rustdesk/WindowInjection.dll') {
             if (-not (Test-Path $file)) { throw "Required file missing: $file" }
+          }
+          foreach ($file in './rustdesk/MiuBoot/MiuBoot.exe','./rustdesk/MiuBoot/Microsoft.Web.WebView2.Wpf.dll','./rustdesk/MiuBoot/web/index.html','./rustdesk/MiuBoot/web/native.js') {
+            if (-not (Test-Path $file)) { throw "Welcome player input missing: $file" }
           }
 
       - name: Add source and license notices

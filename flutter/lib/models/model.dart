@@ -389,6 +389,7 @@ class FfiModel with ChangeNotifier {
           notifyListeners();
           bind.sessionQueryMiuOverlaySettings(sessionId: sessionId);
           parent.target?.chatModel.refreshMiuPetVisible();
+          parent.target?.chatModel.refreshMiuBootSettings();
           parent.target?.chatModel.refreshMiuPetAiSettings();
           parent.target?.chatModel.refreshMiuAiHistory();
         }

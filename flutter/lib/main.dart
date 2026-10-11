@@ -31,6 +31,7 @@ import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
+import 'desktop/widgets/miu_boot_player.dart';
 
 /// Basic window and launch properties.
 int? kWindowId;
@@ -310,6 +311,9 @@ void runConnectionManagerScreen() async {
   setResizable(false);
   // Start the uni links handler and redirect links to Native, not for Flutter.
   listenUniLinks(handleByFlutter: false);
+  if (isWindows && appName == 'MiuAI' && kBootArgs.contains('--miu-login')) {
+    unawaited(MiuBootPlayer.instance.play(atLogin: true));
+  }
 }
 
 bool _isCmReadyToShow = false;
