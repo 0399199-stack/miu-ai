@@ -3405,6 +3405,7 @@ class _MiuOverlayTextMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = Provider.of<FfiModel>(context);
+    final dialogContext = Navigator.of(context, rootNavigator: true).context;
     return _IconSubmenuButton(
       tooltip: '更换 B 机光效横幅文字',
       icon: const Row(
@@ -3443,7 +3444,7 @@ class _MiuOverlayTextMenu extends StatelessWidget {
         MenuButton(
           ffi: ffi,
           onPressed: model.miuPeerAuthenticated
-              ? () => _showCustomText(context, model)
+              ? () => _showCustomText(dialogContext, model)
               : null,
           child: const Text('自定义文字…'),
         ),

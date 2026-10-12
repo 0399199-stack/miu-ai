@@ -45,6 +45,7 @@ internal sealed class BootWindow : Window
     private readonly WebView2CompositionControl view = new WebView2CompositionControl();
     private readonly string color;
     private readonly ReadySurface ready;
+    private readonly Border backdrop = new Border { Background = Brushes.Black, IsHitTestVisible = false };
     private readonly DispatcherTimer watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(35) };
     private const string Origin = "https://miu-boot.local/";
 
@@ -65,6 +66,7 @@ internal sealed class BootWindow : Window
         Cursor = Cursors.None;
         ready = new ReadySurface(color);
         var root = new Grid();
+        root.Children.Add(backdrop);
         root.Children.Add(view);
         root.Children.Add(ready);
         Content = root;
@@ -124,6 +126,18 @@ internal sealed class BootWindow : Window
                             EasingFunction = new QuinticEase { EasingMode = EasingMode.EaseInOut }
                         });
                         ready.Play();
+                        // Keep READY opaque, then reveal the desktop from the center
+                        // to the saved edge glow. Both stops finish before the window closes.
+                        var mask = new RadialGradientBrush(Colors.White, Colors.White) { RadiusX = .72, RadiusY = .72 };
+                        backdrop.OpacityMask = mask;
+                        for (int i = 0; i < mask.GradientStops.Count; i++)
+                        {
+                            mask.GradientStops[i].BeginAnimation(GradientStop.ColorProperty,
+                                new ColorAnimation(Colors.White, Colors.Transparent, TimeSpan.FromSeconds(1.45)) {
+                                    BeginTime = TimeSpan.FromSeconds(4 + i * .2),
+                                    EasingFunction = new QuinticEase { EasingMode = EasingMode.EaseInOut }
+                                });
+                        }
                     }
                     else if (message == "finished") Stop("finished");
                 };

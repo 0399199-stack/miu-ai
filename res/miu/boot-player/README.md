@@ -7,7 +7,7 @@
 - The existing authenticated desktop chat-control transport carries `boot-state`, `boot-settings`, and `boot-play`. Reconnection resets A's cache and queries B. Old B versions keep controls disabled. A reports playback success only after the native player acknowledges `STARTED`.
 - B's existing MSI Startup shortcut adds `--miu-login`. Only that CM launch checks auto-play; ordinary remote connections do not start the animation. No separate Windows Run registration or taskbar setting changes.
 - Player: .NET Framework 4.8, WPF and WebView2 CompositionControl. Uses the installed WebView2 Runtime; it does not install a runtime silently. Fixed local assets only, external navigation/downloads/permissions blocked, no commands or screen/data collection.
-- The first 12 seconds reuse the approved revision-8 realtime HTML animation. A native transparent WPF layer renders READY and fades the browser away, avoiding the opaque-background regression reported for [WebView2 Runtime 154](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5752). The window then closes, revealing the existing desktop and saved B glow. It never overwrites the real overlay state.
+- The first 12 seconds reuse the approved revision-8 realtime HTML animation. Native WPF renders READY on an opaque black backdrop, with all text using the exact selected color. The local Miu Circuit Bold font places Miu AI above a larger READY. After the text fades out, a soft radial opacity fade reveals the desktop from center to edges, including the existing saved B glow. The 18-second sequence ends with a transparent tail before closing; it never overwrites the real overlay state. Native composition avoids reliance on transparent browser backgrounds on [WebView2 Runtime 154](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5752).
 - Native fullscreen on the primary monitor. Esc skips; the player closes after the sequence, renderer failure or a 35-second watchdog. One concurrent player per Windows session.
 
 ## Build
@@ -55,5 +55,7 @@ Existing files changed only where needed:
 Other functionality keeps its existing path. No Rust protocol/bridge changes, no real-glow implementation changes, no pet/chat behavior changes.
 
 ## Asset licenses
+
+Miu Circuit Bold is a renamed static weight-700 instance of Orbitron, distributed under SIL OFL 1.1. The source notice and original OFL license are in `web/assets/fonts/`. It is bundled locally, without installing a Windows font.
 
 The approved Varesco demo font and its derived logo outlines are **personal-use-only**. This local integration is not a commercial redistribution license. Obtain the required Varesco license before distributing the font/outlines commercially, or replace them with licensed artwork. Notices are in `web/assets/fonts/`. Space Grotesk and JetBrains Mono retain their OFL notices. WebView2 SDK is restored from the pinned Microsoft NuGet package.

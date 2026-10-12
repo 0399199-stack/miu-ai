@@ -1,0 +1,6 @@
+Miu Circuit Bold is a renamed static weight-700 instance of the bundled Orbitron variable font.
+Source: Google Fonts commit bd8f81ddb5c74d5c8897b36ad88b440266245103, ofl/orbitron/Orbitron[wght].ttf
+Original copyright: 2018 The Orbitron Project Authors.
+License: SIL OFL 1.1; see Orbitron-OFL.txt. The reserved family name Orbitron is not used by this derivative.
+Generated with fontTools 4.66.1; glyph outlines unchanged, only weight instantiated and family/style metadata renamed.
+Bundled locally; no system font installation.

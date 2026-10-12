@@ -5,8 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 
-// Native composition keeps the desktop handoff transparent even on WebView2
-// runtimes which incorrectly paint alpha-zero browser backgrounds as opaque.
+// Native composition controls the desktop reveal independently of WebView2 alpha.
 internal sealed class ReadySurface : Viewbox
 {
     internal ReadySurface(string color)
@@ -18,30 +17,23 @@ internal sealed class ReadySurface : Viewbox
         IsHitTestVisible = false;
         Effect = new DropShadowEffect { Color = Colors.Black, Opacity = .55, BlurRadius = 20, ShadowDepth = 2 };
         var accent = (Color)ColorConverter.ConvertFromString(color);
-        var ink = new SolidColorBrush(Color.FromRgb(
-            (byte)(205 + accent.R * 50 / 255),
-            (byte)(205 + accent.G * 50 / 255),
-            (byte)(205 + accent.B * 50 / 255)));
         var accentBrush = new SolidColorBrush(accent);
-        var font = new FontFamily(new Uri(AppDomain.CurrentDomain.BaseDirectory), "./web/assets/fonts/#Space Grotesk");
+        var font = new FontFamily(new Uri(AppDomain.CurrentDomain.BaseDirectory), "./web/assets/fonts/#Miu Circuit");
         var stack = new StackPanel { Width = 850 };
         stack.Children.Add(new TextBlock {
-            Text = "EVERYTHING IN ITS PLACE.", FontFamily = font, FontSize = 14,
+            Text = "EVERYTHING IN ITS PLACE.", FontFamily = font, FontSize = 11,
             FontWeight = FontWeights.Medium, Foreground = accentBrush,
-            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 35)
+            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 26)
         });
-        var title = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        var title = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
         title.Children.Add(new TextBlock {
-            Text = "Miu AI", FontFamily = font, FontSize = 108,
-            FontWeight = FontWeights.Bold, Foreground = ink
-        });
-        title.Children.Add(new Border {
-            Width = 1, Height = 58, Background = accentBrush,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(35, 0, 35, 0), Opacity = .5
+            Text = "Miu AI", FontFamily = font, FontSize = 42,
+            FontWeight = FontWeights.Bold, Foreground = accentBrush,
+            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 8)
         });
         title.Children.Add(new TextBlock {
-            Text = "READY", FontFamily = font, FontSize = 44,
-            FontWeight = FontWeights.Bold, Foreground = accentBrush, VerticalAlignment = VerticalAlignment.Center
+            Text = "READY", FontFamily = font, FontSize = 112,
+            FontWeight = FontWeights.Bold, Foreground = accentBrush, HorizontalAlignment = HorizontalAlignment.Center
         });
         stack.Children.Add(title);
         stack.Children.Add(new Border {
@@ -52,7 +44,7 @@ internal sealed class ReadySurface : Viewbox
         });
         stack.Children.Add(new TextBlock {
             Text = "Miu AI已就绪，陪你开始今天", FontFamily = new FontFamily("Microsoft YaHei UI"),
-            FontSize = 20, Foreground = ink, HorizontalAlignment = HorizontalAlignment.Center
+            FontSize = 18, Foreground = accentBrush, HorizontalAlignment = HorizontalAlignment.Center
         });
         Child = stack;
         RenderTransformOrigin = new Point(.5, .5);
@@ -66,9 +58,9 @@ internal sealed class ReadySurface : Viewbox
         opacity.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(.9))));
         opacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.7)), ease));
         opacity.KeyFrames.Add(new DiscreteDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(2.9))));
-        opacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(4.3)), ease));
+        opacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(4)), ease));
         BeginAnimation(OpacityProperty, opacity);
-        var scale = new DoubleAnimation(.97, 1.035, TimeSpan.FromSeconds(4.3)) { EasingFunction = ease };
+        var scale = new DoubleAnimation(.97, 1.035, TimeSpan.FromSeconds(4)) { EasingFunction = ease };
         RenderTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scale);
         RenderTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scale);
     }

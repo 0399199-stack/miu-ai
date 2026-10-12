@@ -4,7 +4,7 @@
   const elements = new Map();
   const $ = (id) => elements.get(id) || (elements.set(id, document.getElementById(id)), elements.get(id));
   const text = (id, value) => { const el = $(id); if (el.textContent !== value) el.textContent = value; };
-  const duration = 17;
+  const duration = 18;
   const scene = $('experience');
   const panels = [...document.querySelectorAll('[data-enter]')];
   const clamp = (n) => Math.max(0, Math.min(1, n));
