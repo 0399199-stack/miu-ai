@@ -33,11 +33,14 @@ class _MiuBootControlsState extends State<MiuBootControls> {
 
   Future<void> _save({String? color, bool? autoPlay}) async {
     final current = widget.ffi.chatModel.miuBootSettings;
-    if (_busy || current == null) return;
-    setState(() {
-      _busy = true;
-      _status = '正在保存到 B 机…';
-    });
+    if (_busy || current == null || widget.ffi.closed ||
+        !widget.ffi.ffiModel.miuPeerAuthenticated) return;
+    if (mounted) {
+      setState(() {
+        _busy = true;
+        _status = '正在保存到 B 机…';
+      });
+    }
     final ok = await widget.ffi.chatModel.setMiuBootSettings(MiuBootSettings(
         color: color ?? current.color, autoPlay: autoPlay ?? current.autoPlay));
     if (mounted) {
@@ -114,7 +117,9 @@ class _MiuBootControlsState extends State<MiuBootControls> {
                         ? null
                         : () async {
                             final selected = await showColorPickerDialog(
-                                context,
+                                // The toolbar menu can close while the picker is open.
+                                Navigator.of(context, rootNavigator: true)
+                                    .context,
                                 Color(int.parse(color.substring(1), radix: 16) |
                                     0xFF000000),
                                 pickersEnabled: {
@@ -122,10 +127,9 @@ class _MiuBootControlsState extends State<MiuBootControls> {
                                   ColorPickerType.wheel: true
                                 },
                                 showColorCode: true);
-                            if (mounted &&
-                                selected.value !=
-                                    (int.parse(color.substring(1), radix: 16) |
-                                        0xFF000000)) {
+                            if (selected.value !=
+                                (int.parse(color.substring(1), radix: 16) |
+                                    0xFF000000)) {
                               await _save(
                                   color:
                                       '#${(selected.value & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}');

@@ -1,7 +1,9 @@
+import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_boot_controls.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_boot_player.dart';
+import 'package:flutter_hbb/desktop/widgets/miu_toolbar_surface.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 
@@ -11,11 +13,13 @@ class _Chat extends ChangeNotifier implements ChatModel {
   @override
   bool? miuBootAvailable = true;
   int plays = 0;
+  int saves = 0;
   bool refreshSucceeds = true;
   @override
   Future<bool> refreshMiuBootSettings() async => refreshSucceeds;
   @override
   Future<bool> setMiuBootSettings(MiuBootSettings settings) async {
+    saves++;
     miuBootSettings = settings;
     notifyListeners();
     return true;
@@ -51,6 +55,46 @@ class _Session implements FFI {
 }
 
 void main() {
+  for (final confirm in [true, false]) {
+    testWidgets('custom boot color ${confirm ? 'saves' : 'cancels'} from toolbar menu',
+        (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final chat = _Chat();
+      final peer = _Peer();
+      addTearDown(chat.dispose);
+      addTearDown(peer.dispose);
+      await tester.pumpWidget(MaterialApp(home: Scaffold(
+        body: MiuToolbarMenuBar(child: MiuToolbarMenu(
+          icon: Icons.palette_outlined, label: '光效',
+          builder: (_, close) => MiuBootControls(ffi: _Session(chat, peer)),
+        )),
+      )));
+      await tester.tap(find.text('光效'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('自定义颜色  #48AAFF'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Wheel'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '12ABEF');
+      await tester.pumpAndSettle();
+      expect(tester.widget<ColorCodeField>(find.byType(ColorCodeField)).color,
+          const Color(0xFF12ABEF));
+      await tester.tap(find.text(confirm ? 'OK' : 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ColorPicker), findsNothing);
+      expect(chat.saves, confirm ? 1 : 0);
+      expect(chat.miuBootSettings?.color, confirm ? '#12ABEF' : '#48AAFF');
+      await tester.tap(find.text('光效'));
+      await tester.pumpAndSettle();
+      expect(find.text('自定义颜色  ${chat.miuBootSettings?.color}'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   Future<_Chat> mount(WidgetTester tester, {bool supported = true}) async {
     final chat = _Chat();
     final peer = _Peer();
