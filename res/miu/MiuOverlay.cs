@@ -187,14 +187,19 @@ internal sealed class Overlay : Form
                     int pillWidth = Math.Min(Math.Max(80, logicalWidth - 32), Math.Max(160, desiredWidth));
                     Rectangle r = new Rectangle((logicalWidth - pillWidth) / 2, 18, pillWidth, 44);
                     using (GraphicsPath path = Pill(r, 12))
-                    using (Brush fill = new SolidBrush(Color.FromArgb(255, color)))
+                    using (Brush fill = new SolidBrush(Color.Black))
                     {
+                        for (int spread = 12; spread >= 1; spread--)
+                        {
+                            int alpha = (int)Math.Round(36 * Math.Pow(1 - spread / 13.0, 2));
+                            using (Pen halo = new Pen(Color.FromArgb(alpha, Color.White), spread * 2))
+                                g.DrawPath(halo, path);
+                        }
                         g.FillPath(fill, path);
+                        using (Pen rim = new Pen(Color.FromArgb(210, Color.White), 1f))
+                            g.DrawPath(rim, path);
                     }
-                    Func<byte, double> linear = component => component <= 10
-                        ? component / 3294.6 : Math.Pow((component / 255.0 + 0.055) / 1.055, 2.4);
-                    double luminance = 0.2126 * linear(color.R) + 0.7152 * linear(color.G) + 0.0722 * linear(color.B);
-                    using (Brush ink = new SolidBrush(luminance > 0.179 ? Color.Black : Color.White))
+                    using (Brush ink = new SolidBrush(Color.White))
                     using (StringFormat format = new StringFormat())
                     {
                         format.Alignment = StringAlignment.Center;

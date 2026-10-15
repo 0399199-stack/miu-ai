@@ -1,3 +1,4 @@
+import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -28,6 +29,14 @@ class _MiuNoticeComposerState extends State<MiuNoticeComposer> {
   final _title = TextEditingController(text: 'Miu AI');
   final _text = TextEditingController();
   final _seconds = TextEditingController(text: '15');
+  Color _textColor = const Color(0xFF1C2740);
+  static const _colors = [
+    (Color(0xFF1C2740), '深灰'),
+    (Color(0xFF235FC8), '蓝色'),
+    (Color(0xFFC52B40), '红色'),
+    (Color(0xFF158049), '绿色'),
+    (Color(0xFF7B3FC6), '紫色'),
+  ];
   bool _sound = true;
   bool _sending = false;
   bool _sent = false;
@@ -41,6 +50,8 @@ class _MiuNoticeComposerState extends State<MiuNoticeComposer> {
       'text': _text.text,
       'seconds': seconds,
       'sound': _sound,
+      'textColor':
+          '#${(_textColor.value & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
     });
   }
 
@@ -53,6 +64,23 @@ class _MiuNoticeComposerState extends State<MiuNoticeComposer> {
   }
 
   void _changed(String _) => setState(() => _status = null);
+
+  Future<void> _pickTextColor() async {
+    final selected = await showColorPickerDialog(
+      Navigator.of(context, rootNavigator: true).context,
+      _textColor,
+      pickersEnabled: {
+        ColorPickerType.accent: false,
+        ColorPickerType.wheel: true,
+      },
+      showColorCode: true,
+    );
+    if (!mounted || selected == _textColor) return;
+    setState(() {
+      _textColor = selected;
+      _status = null;
+    });
+  }
 
   Future<void> _send() async {
     final notice = _notice;
@@ -139,6 +167,55 @@ class _MiuNoticeComposerState extends State<MiuNoticeComposer> {
                     onChanged: _changed,
                   ),
                   const SizedBox(height: 12),
+                  const Text('文字颜色（标题与正文）'),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    for (final preset in _colors)
+                      ChoiceChip(
+                        avatar:
+                            CircleAvatar(radius: 7, backgroundColor: preset.$1),
+                        label: Text(preset.$2),
+                        selected: _textColor == preset.$1,
+                        onSelected: _sending
+                            ? null
+                            : (_) => setState(() {
+                                  _textColor = preset.$1;
+                                  _status = null;
+                                }),
+                      ),
+                    TextButton.icon(
+                      onPressed: _sending ? null : _pickTextColor,
+                      icon: const Icon(Icons.colorize_rounded, size: 17),
+                      label: const Text('自定义颜色'),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F9FE),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_title.text.isEmpty ? '通知标题' : _title.text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: _textColor,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        Text(_text.text.isEmpty ? '通知文字预览' : _text.text,
+                            key: const ValueKey('miu-notice-color-preview'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: _textColor, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     key: const ValueKey('miu-notice-seconds'),
                     controller: _seconds,

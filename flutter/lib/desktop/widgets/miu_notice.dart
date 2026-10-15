@@ -10,12 +10,15 @@ class MiuNotice {
     required this.text,
     this.seconds = 15,
     this.sound = true,
+    this.textColor = defaultTextColor,
   });
 
+  static const defaultTextColor = '#1C2740';
   final String title;
   final String text;
   final int seconds;
   final bool sound;
+  final String textColor;
 
   static MiuNotice? parse(Object? value) {
     if (value is! Map ||
@@ -26,6 +29,10 @@ class MiuNotice {
     final title = value['title'] as String;
     final text = value['text'] as String;
     final seconds = value['seconds'] as int;
+    final textColor =
+        value.containsKey('textColor') ? value['textColor'] : defaultTextColor;
+    if (textColor is! String ||
+        !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(textColor)) return null;
     if (RegExp(r'[\x00-\x1f\x7f-\x9f]').hasMatch(title) ||
         RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]').hasMatch(text) ||
         title.trim().isEmpty ||
@@ -38,7 +45,8 @@ class MiuNotice {
         title: title.trim(),
         text: text.trim(),
         seconds: seconds,
-        sound: value['sound'] as bool);
+        sound: value['sound'] as bool,
+        textColor: textColor.toUpperCase());
   }
 
   Map<String, dynamic> toJson() => {
@@ -46,6 +54,7 @@ class MiuNotice {
         'text': text,
         'seconds': seconds,
         'sound': sound,
+        'textColor': textColor,
       };
 }
 

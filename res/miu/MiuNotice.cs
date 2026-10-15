@@ -16,6 +16,7 @@ internal sealed class NoticeContent
     internal string Text;
     internal int Seconds;
     internal bool Sound;
+    internal Color TextColor = Color.FromArgb(28, 39, 64);
 
     internal static NoticeContent Read(Stream input)
     {
@@ -46,7 +47,18 @@ internal sealed class NoticeContent
         if (cleanTitle.Length < 1 || cleanTitle.Length > 60 ||
             cleanText.Length < 1 || cleanText.Length > 1200 || (int)seconds < 1 || (int)seconds > 300)
             throw new InvalidDataException();
-        return new NoticeContent { Title = cleanTitle, Text = cleanText, Seconds = (int)seconds, Sound = (bool)sound };
+        Color textColor = Color.FromArgb(28, 39, 64);
+        object colorValue;
+        if (data.TryGetValue("textColor", out colorValue))
+        {
+            string hex = colorValue as string;
+            if (hex == null || hex.Length != 7 || hex[0] != '#') throw new InvalidDataException();
+            for (int i = 1; i < hex.Length; i++)
+                if (!Uri.IsHexDigit(hex[i])) throw new InvalidDataException();
+            textColor = Color.FromArgb(255, Convert.ToInt32(hex.Substring(1, 2), 16),
+                Convert.ToInt32(hex.Substring(3, 2), 16), Convert.ToInt32(hex.Substring(5, 2), 16));
+        }
+        return new NoticeContent { Title = cleanTitle, Text = cleanText, Seconds = (int)seconds, Sound = (bool)sound, TextColor = textColor };
     }
 
     private static void ValidateCharacters(string value, bool multiline)
@@ -90,12 +102,9 @@ internal sealed class NoticeWindow : Form
         BackColor = Color.FromArgb(247, 249, 254);
         ForeColor = Color.FromArgb(28, 39, 64);
         DoubleBuffered = true;
-        using (Graphics graphics = CreateGraphics()) scale = graphics.DpiX / 96f;
         Rectangle area = Screen.FromPoint(Cursor.Position).WorkingArea;
-        int width = Math.Min(Px(620), area.Width - Px(24));
-        int height = Math.Min(Px(480), area.Height - Px(24));
-        ClientSize = new Size(Math.Max(240, width), Math.Max(180, height));
-        Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+        Location = new Point(area.Left + area.Width / 2, area.Top + area.Height / 2);
+        using (Graphics graphics = CreateGraphics()) scale = graphics.DpiX / 96f;
 
         brand.Text = "MIU AI  /  消息";
         brand.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
@@ -105,6 +114,7 @@ internal sealed class NoticeWindow : Form
         brand.MouseDown += DragWindow;
         title.Text = content.Title;
         title.Font = new Font("Microsoft YaHei UI", 16f, FontStyle.Bold);
+        title.ForeColor = content.TextColor;
         title.UseMnemonic = false;
         title.MouseDown += DragWindow;
         body.Font = new Font("Microsoft YaHei UI", 11f);
@@ -113,7 +123,7 @@ internal sealed class NoticeWindow : Form
         body.DetectUrls = false;
         body.BorderStyle = BorderStyle.None;
         body.BackColor = BackColor;
-        body.ForeColor = ForeColor;
+        body.ForeColor = content.TextColor;
         body.ScrollBars = RichTextBoxScrollBars.Vertical;
         body.WordWrap = true;
         body.ShortcutsEnabled = true;
@@ -133,6 +143,7 @@ internal sealed class NoticeWindow : Form
         acknowledge.Click += delegate { Close(); };
         MouseDown += DragWindow;
         Controls.AddRange(new Control[] { brand, title, body, countdown, acknowledge, close });
+        SizeToContent(area);
         LayoutContent();
         UpdateCountdown();
         timer.Interval = 100;
@@ -144,6 +155,32 @@ internal sealed class NoticeWindow : Form
     }
 
     private int Px(float value) { return Math.Max(1, (int)Math.Round(value * scale)); }
+
+    private void SizeToContent(Rectangle area)
+    {
+        int margin = Px(24);
+        int availableWidth = Math.Max(1, area.Width - Px(24));
+        int maximumWidth = Math.Min(Px(620), availableWidth);
+        int titleWidth = TextRenderer.MeasureText(content.Title, title.Font,
+            Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine).Width;
+        int textWidth = TextRenderer.MeasureText(content.Text, body.Font,
+            Size.Empty, TextFormatFlags.NoPrefix).Width + Px(8);
+        int width = Math.Min(maximumWidth, Math.Max(Px(360), Math.Max(titleWidth, textWidth) + margin * 2));
+        int innerWidth = Math.Max(1, width - margin * 2);
+        int titleHeight = MeasureTitleHeight(innerWidth);
+        int textHeight = TextRenderer.MeasureText(content.Text, body.Font,
+            new Size(Math.Max(1, innerWidth - Px(8)), int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl).Height + Px(8);
+        int height = Px(58) + titleHeight + Px(12) + Math.Max(Px(28), textHeight) + Px(82);
+        ClientSize = new Size(width, Math.Min(height, Math.Min(Px(560), Math.Max(1, area.Height - Px(24)))));
+        Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+    }
+
+    private int MeasureTitleHeight(int width)
+    {
+        return TextRenderer.MeasureText(content.Title, title.Font,
+            new Size(Math.Max(1, width), int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + Px(4);
+    }
 
     protected override CreateParams CreateParams
     {
@@ -169,20 +206,18 @@ internal sealed class NoticeWindow : Form
 
     private void LayoutContent()
     {
-        int margin = Px(28);
+        int margin = Px(24);
         int innerWidth = ClientSize.Width - margin * 2;
-        brand.SetBounds(margin, Px(18), innerWidth - Px(40), Px(30));
-        close.SetBounds(ClientSize.Width - margin - Px(34), Px(13), Px(38), Px(38));
-        int titleHeight = TextRenderer.MeasureText(content.Title, title.Font,
-            new Size(innerWidth, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height;
-        titleHeight = Math.Min(titleHeight + Px(6), Math.Max(Px(30), ClientSize.Height / 3));
-        title.SetBounds(margin, Px(66), innerWidth, titleHeight);
-        int footerTop = ClientSize.Height - Px(72);
-        dividerY = footerTop - Px(16);
-        int bodyTop = title.Bottom + Px(18);
-        body.SetBounds(margin, bodyTop, innerWidth, Math.Max(Px(20), dividerY - bodyTop - Px(18)));
-        countdown.SetBounds(margin, footerTop, innerWidth - Px(142), Px(42));
-        acknowledge.SetBounds(ClientSize.Width - margin - Px(126), footerTop, Px(126), Px(42));
+        brand.SetBounds(margin, Px(14), innerWidth - Px(40), Px(28));
+        close.SetBounds(ClientSize.Width - margin - Px(30), Px(9), Px(34), Px(34));
+        int titleHeight = Math.Min(MeasureTitleHeight(innerWidth), Math.Max(Px(30), ClientSize.Height / 3));
+        title.SetBounds(margin, Px(58), innerWidth, titleHeight);
+        int footerTop = ClientSize.Height - Px(62);
+        dividerY = footerTop - Px(10);
+        int bodyTop = title.Bottom + Px(12);
+        body.SetBounds(margin, bodyTop, innerWidth, Math.Max(Px(20), dividerY - bodyTop - Px(10)));
+        countdown.SetBounds(margin, footerTop, innerWidth - Px(120), Px(42));
+        acknowledge.SetBounds(ClientSize.Width - margin - Px(108), footerTop, Px(108), Px(42));
     }
 
     private void DragWindow(object sender, MouseEventArgs e)
@@ -252,7 +287,7 @@ internal sealed class NoticeWindow : Form
         using (GraphicsPath border = RoundRectangle(new Rectangle(0, 0, Width - 1, Height - 1), Px(18)))
         using (Pen pen = new Pen(Color.FromArgb(205, 215, 235), Px(1))) e.Graphics.DrawPath(pen, border);
         using (Pen pen = new Pen(Color.FromArgb(223, 230, 242)))
-            e.Graphics.DrawLine(pen, Px(28), dividerY, Width - Px(28), dividerY);
+            e.Graphics.DrawLine(pen, Px(24), dividerY, Width - Px(24), dividerY);
     }
 
     protected override void Dispose(bool disposing)

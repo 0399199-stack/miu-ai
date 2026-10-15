@@ -10,6 +10,13 @@ void main() {
     expect(parsed.text, '第一行\n第二行🐱');
     expect(parsed.seconds, 15);
     expect(parsed.sound, isTrue);
+    expect(parsed.textColor, MiuNotice.defaultTextColor);
+    expect(
+        MiuNotice.parse({...valid, 'textColor': '#ad2356'})!
+            .toJson()['textColor'],
+        '#AD2356');
+    final legacy = {...valid}..remove('textColor');
+    expect(MiuNotice.parse(legacy)!.textColor, MiuNotice.defaultTextColor);
     for (final change in <Map<String, dynamic>>[
       {'title': ''},
       {'title': 'x' * 61},
@@ -21,6 +28,10 @@ void main() {
       {'seconds': 301},
       {'seconds': 1.5},
       {'sound': 'true'},
+      {'textColor': null},
+      {'textColor': '#F00'},
+      {'textColor': '#FF000080'},
+      {'textColor': 'red'},
     ]) {
       expect(MiuNotice.parse({...valid, ...change}), isNull, reason: '$change');
     }
