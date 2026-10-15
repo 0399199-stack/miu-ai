@@ -95,6 +95,10 @@ jobs:
         working-directory: flutter
         run: flutter test --timeout 60s test/miu_boot_player_test.dart test/miu_boot_controls_test.dart
 
+      - name: Verify Miu notice validation and composer
+        working-directory: flutter
+        run: flutter test --timeout 60s test/miu_notice_test.dart test/miu_notice_composer_test.dart
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
@@ -156,6 +160,15 @@ jobs:
           dotnet build ./res/miu/boot-player/MiuBoot.csproj -c Release --nologo -o ./rustdesk/MiuBoot
           if ($LASTEXITCODE -ne 0) { throw 'Miu welcome player compilation failed' }
 
+      - name: Build Miu notice window into distribution directory
+        shell: pwsh
+        run: |
+          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $compiler /nologo /target:winexe /optimize+ /out:./rustdesk/MiuNotice.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll .\res\miu\MiuNotice.cs
+          if ($LASTEXITCODE -ne 0) { throw 'Miu notice compilation failed' }
+          $check = Start-Process -FilePath ./rustdesk/MiuNotice.exe -ArgumentList '--check' -Wait -PassThru -WindowStyle Hidden
+          if ($check.ExitCode -ne 0) { throw 'Miu notice startup check failed' }
+
       - name: Add upstream virtual display files
         shell: pwsh
         run: |
@@ -174,7 +187,7 @@ jobs:
       - name: Verify distribution inputs
         shell: pwsh
         run: |
-          foreach ($file in './rustdesk/MiuAI.exe','./rustdesk/librustdesk.dll','./rustdesk/MiuOverlay.exe','./rustdesk/WindowInjection.dll') {
+          foreach ($file in './rustdesk/MiuAI.exe','./rustdesk/librustdesk.dll','./rustdesk/MiuOverlay.exe','./rustdesk/MiuNotice.exe','./rustdesk/WindowInjection.dll') {
             if (-not (Test-Path $file)) { throw "Required file missing: $file" }
           }
           foreach ($file in './rustdesk/MiuBoot/MiuBoot.exe','./rustdesk/MiuBoot/Microsoft.Web.WebView2.Wpf.dll','./rustdesk/MiuBoot/web/index.html','./rustdesk/MiuBoot/web/native.js') {

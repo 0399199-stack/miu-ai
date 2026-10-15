@@ -32,6 +32,7 @@ import './miu_toolbar_surface.dart';
 import './miu_glow_panel.dart';
 import './miu_pet_control_panel.dart';
 import './miu_display_panel.dart';
+import './miu_notice_composer.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -995,6 +996,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         builder: (panelContext, close) => tracked(MiuPetControlPanel(ffi: ffi,
           onClose: close, onChat: () => _showChatPanel(context),
           onSettings: () => _MiuPetAiSettingsButton(ffi: ffi)._showSettings(context))))),
+      MiuToolbarChip(icon: Icons.notifications_active_outlined, label: '通知',
+        tooltip: '向 B 机发送置顶通知',
+        onPressed: !ffi.closed && model.miuPeerAuthenticated && model.isPeerWindows
+            ? () => showMiuNoticeComposer(context, ffi) : null),
       MiuToolbarChip(icon: Icons.bolt_rounded, label: '任务',
         tooltip: model.keyboard ? '打开任务中心' : 'B 机未授权执行任务',
         onPressed: !ffi.closed && model.miuPeerAuthenticated && model.keyboard && model.isPeerWindows

@@ -27,6 +27,7 @@ import '../desktop/widgets/miu_ai_chat.dart';
 import '../desktop/widgets/miu_ai_history.dart';
 import '../desktop/widgets/miu_pet_preferences.dart';
 import '../desktop/widgets/miu_boot_player.dart';
+import '../desktop/widgets/miu_notice.dart';
 import '../main.dart';
 import 'model.dart';
 
@@ -577,6 +578,9 @@ class ChatModel with ChangeNotifier {
       final player = MiuBootPlayer.instance;
       ok = action == 'boot-state' ? true : action == 'boot-settings'
           ? await player.save(data['value']) : await player.play();
+    } else if (action == 'notice-show') {
+      final notice = MiuNotice.parse(data['value']);
+      if (notice != null) ok = await MiuNoticeHost.instance.show(notice);
     } else if (action == 'pet-state') {
       ok = true;
     } else if (action == 'pet-visible' && data['value'] is bool) {
@@ -773,6 +777,13 @@ class ChatModel with ChangeNotifier {
 
   Future<bool> playMiuBoot() async {
     final result = await _requestMiuControl('boot-play', null);
+    return result?['ok'] == true;
+  }
+
+  Future<bool> sendMiuNotice(MiuNotice notice) async {
+    final validated = MiuNotice.parse(notice.toJson());
+    if (validated == null) return false;
+    final result = await _requestMiuControl('notice-show', validated.toJson());
     return result?['ok'] == true;
   }
 

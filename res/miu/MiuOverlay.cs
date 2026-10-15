@@ -186,22 +186,15 @@ internal sealed class Overlay : Form
                     int desiredWidth = (int)Math.Ceiling(g.MeasureString(text, font).Width) + 44;
                     int pillWidth = Math.Min(Math.Max(80, logicalWidth - 32), Math.Max(160, desiredWidth));
                     Rectangle r = new Rectangle((logicalWidth - pillWidth) / 2, 18, pillWidth, 44);
-                    for (int i = 10; i >= 1; i--)
-                    {
-                        Rectangle glow = Rectangle.Inflate(r, i, i / 2);
-                        using (GraphicsPath path = Pill(glow, 14 + i / 2))
-                        using (Pen pen = new Pen(Color.FromArgb((int)(brightness * 80 / i), color), 2))
-                            g.DrawPath(pen, path);
-                    }
                     using (GraphicsPath path = Pill(r, 12))
-                    using (Brush fill = new SolidBrush(Color.FromArgb(230,
-                        20 + color.R * 42 / 100, 20 + color.G * 42 / 100, 20 + color.B * 42 / 100)))
-                    using (Pen rim = new Pen(Color.FromArgb(110, color), 1))
+                    using (Brush fill = new SolidBrush(Color.FromArgb(255, color)))
                     {
                         g.FillPath(fill, path);
-                        g.DrawPath(rim, path);
                     }
-                    using (Brush ink = new SolidBrush(Color.White))
+                    Func<byte, double> linear = component => component <= 10
+                        ? component / 3294.6 : Math.Pow((component / 255.0 + 0.055) / 1.055, 2.4);
+                    double luminance = 0.2126 * linear(color.R) + 0.7152 * linear(color.G) + 0.0722 * linear(color.B);
+                    using (Brush ink = new SolidBrush(luminance > 0.179 ? Color.Black : Color.White))
                     using (StringFormat format = new StringFormat())
                     {
                         format.Alignment = StringAlignment.Center;
@@ -264,6 +257,7 @@ internal sealed class Overlay : Form
 
     internal void UpdateLayer(byte alpha)
     {
+        if (banner && alpha != 255) return;
         IntPtr screenDc = Native.GetDC(IntPtr.Zero);
         Native.Point position = new Native.Point(Left, Top);
         Native.Point source = new Native.Point(0, 0);
@@ -359,17 +353,23 @@ internal sealed class OverlayApp : ApplicationContext
         if (accents != null)
             foreach (Overlay accent in accents) accent.Close();
         Screen[] screens = Screen.AllScreens;
-        windows = new Overlay[screens.Length];
+        windows = new Overlay[screens.Length + (ambient ? 0 : 1)];
         accents = effect == "marquee" ? new Overlay[screens.Length] : new Overlay[0];
         for (int i = 0; i < screens.Length; i++)
         {
-            windows[i] = new Overlay(screens[i], color, brightness, screens[i].Primary && !ambient, false, text);
+            windows[i] = new Overlay(screens[i], color, brightness, false, false, text);
             windows[i].Show();
             if (effect == "marquee")
             {
                 accents[i] = new Overlay(screens[i], color, brightness, false, true, text);
                 accents[i].Show();
             }
+        }
+        if (!ambient)
+        {
+            // Keep the opaque banner separate from the animated edge layer.
+            windows[screens.Length] = new Overlay(Screen.PrimaryScreen, color, 0, true, false, text);
+            windows[screens.Length].Show();
         }
     }
 
