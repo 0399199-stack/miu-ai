@@ -89,10 +89,10 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
-          RUSTFLAGS: -C link-arg=-Wl,-z,max-page-size=16384
+          RUSTFLAGS: -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,--no-undefined
         run: |
-          cargo install cargo-ndk --version 3.1.2 --locked
-          cargo ndk --platform 26 --target '${{ matrix.target }}' build --lib --locked --release --features flutter,hwcodec,miu-android-controller
+          cargo +stable install cargo-ndk --version 4.1.2 --locked
+          cargo ndk --link-builtins --platform 26 --target '${{ matrix.target }}' build --lib --locked --release --features flutter,hwcodec,miu-android-controller
           mkdir -p flutter/android/app/src/main/jniLibs/${{ matrix.abi }}
           cp target/${{ matrix.target }}/release/liblibrustdesk.so flutter/android/app/src/main/jniLibs/${{ matrix.abi }}/librustdesk.so
           cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/libc++_shared.so" flutter/android/app/src/main/jniLibs/${{ matrix.abi }}/
@@ -138,6 +138,7 @@ jobs:
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           export ANDROID_AVD_HOME="$RUNNER_TEMP/miu-avd"
           mkdir -p "$ANDROID_AVD_HOME"
+          trap 'timeout 15 adb logcat -d > MiuAndroidOutput/android16-logcat.txt || true; cp "$RUNNER_TEMP/emulator.log" MiuAndroidOutput/emulator.log || true' EXIT
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-36;google_apis;x86_64' 'emulator'
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n miu-api36 -k 'system-images;android-36;google_apis;x86_64' --device pixel_6
           sudo chmod 666 /dev/kvm
@@ -153,8 +154,9 @@ jobs:
           adb logcat -c
           adb shell am start -W -n ai.miu.controller/com.carriez.flutter_hbb.MainActivity > MiuAndroidOutput/emulator-start.txt
           sleep 15
-          adb shell pidof ai.miu.controller >> MiuAndroidOutput/emulator-start.txt
+          adb logcat -d > MiuAndroidOutput/android16-logcat.txt
           adb exec-out screencap -p > MiuAndroidOutput/android16-portrait.png
+          adb shell pidof ai.miu.controller >> MiuAndroidOutput/emulator-start.txt
           adb shell settings put system accelerometer_rotation 0
           adb shell settings put system user_rotation 1
           sleep 3
@@ -167,6 +169,7 @@ jobs:
           if grep -E 'FATAL EXCEPTION|Fatal signal|E/flutter.*(Unhandled Exception|Error)' MiuAndroidOutput/android16-logcat.txt; then exit 1; fi
           adb shell getprop ro.build.version.sdk >> MiuAndroidOutput/emulator-start.txt
           adb shell getconf PAGE_SIZE >> MiuAndroidOutput/emulator-start.txt
+          trap - EXIT
           adb emu kill
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
