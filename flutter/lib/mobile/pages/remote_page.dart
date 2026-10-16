@@ -24,6 +24,7 @@ import '../../models/platform_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
+import '../widgets/miu_remote_controls.dart';
 
 final initText = '1' * 1024;
 
@@ -559,7 +560,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Row(
+          Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(
               children: <Widget>[
                     IconButton(
                       color: Colors.white,
@@ -626,6 +627,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   ))
                         ]) +
                   [
+                    if (isAndroid && appName == 'MiuAI' && ffiModel.isPeerWindows)
+                      IconButton(color: Colors.white, tooltip: 'Miu 控制中心',
+                        icon: const Icon(Icons.auto_awesome),
+                        onPressed: ffiModel.miuPeerAuthenticated
+                          ? () => showMiuMobileControls(context, gFFI) : null),
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.more_vert),
@@ -634,7 +640,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         showActions(widget.id);
                       },
                     ),
-                  ]),
+                  ]))),
           Obx(() => IconButton(
                 color: Colors.white,
                 icon: Icon(Icons.expand_more),

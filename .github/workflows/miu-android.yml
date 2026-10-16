@@ -1,0 +1,163 @@
+name: Miu AI Android controller
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
+  ORG_GRADLE_PROJECT_miuController: 'true'
+jobs:
+  bridge:
+    uses: ./.github/workflows/bridge.yml
+  android:
+    needs: bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android
+            platform: android-arm64
+          - abi: x86_64
+            target: x86_64-linux-android
+            platform: android-x64
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+      - uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake gcc-multilib g++-multilib libclang-dev libasound2-dev libgtk-3-dev libpulse-dev libva-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxdo-dev libxfixes-dev libunwind-dev nasm ninja-build pkg-config
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          flutter-version: '3.24.5'
+          cache: true
+      - name: Patch Flutter
+        run: |
+          cd "$(dirname "$(dirname "$(which flutter)")")"
+          git apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        id: ndk
+        with:
+          ndk-version: r28c
+          add-to-path: true
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          doNotCache: false
+      - name: Native dependencies
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: ./flutter/build_android_deps.sh '${{ matrix.abi }}'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75'
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: miu-android
+          key: ${{ matrix.target }}
+      - name: Native controller
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          RUSTFLAGS: -C link-arg=-Wl,-z,max-page-size=16384
+        run: |
+          cargo install cargo-ndk --version 3.1.2 --locked
+          cargo ndk --platform 26 --target '${{ matrix.target }}' build --locked --release --features flutter,hwcodec,miu-android-controller
+          mkdir -p flutter/android/app/src/main/jniLibs/${{ matrix.abi }}
+          cp target/${{ matrix.target }}/release/liblibrustdesk.so flutter/android/app/src/main/jniLibs/${{ matrix.abi }}/librustdesk.so
+          cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/libc++_shared.so" flutter/android/app/src/main/jniLibs/${{ matrix.abi }}/
+      - name: Android signing
+        env:
+          KEYSTORE: ${{ secrets.MIU_ANDROID_KEYSTORE }}
+          STORE_PASSWORD: ${{ secrets.MIU_ANDROID_STORE_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/miu-android.p12"
+          keytool -list -keystore "$RUNNER_TEMP/miu-android.p12" -storepass:env STORE_PASSWORD -alias miu-ai
+          printf 'storeFile=%s\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=miu-ai\n' "$RUNNER_TEMP/miu-android.p12" "$STORE_PASSWORD" "$STORE_PASSWORD" > flutter/android/key.properties
+      - name: Controller UI regression
+        working-directory: flutter
+        run: flutter test test/miu_mobile_controller_test.dart test/miu_control_path_test.dart test/miu_boot_controls_test.dart test/miu_notice_composer_test.dart
+      - name: Build APK
+        working-directory: flutter
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+          sed -i 's/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx4g/' android/gradle.properties
+          flutter build apk --release --flavor miu --target-platform '${{ matrix.platform }}' --build-name 1.0.0 --build-number 1
+          mkdir -p ../MiuAndroidOutput
+          cp build/app/outputs/flutter-apk/app-miu-release.apk ../MiuAndroidOutput/MiuAI-Android-${{ matrix.abi }}.apk
+      - name: Audit APK
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          apk="MiuAndroidOutput/MiuAI-Android-${{ matrix.abi }}.apk"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" > MiuAndroidOutput/signature.txt
+          "$tools/zipalign" -c -P 16 -v 4 "$apk" > MiuAndroidOutput/alignment.txt
+          "$tools/aapt" dump badging "$apk" > MiuAndroidOutput/package.txt
+          "$tools/aapt" dump permissions "$apk" > MiuAndroidOutput/permissions.txt
+          python3 scripts/miu-android-audit.py "$apk" > MiuAndroidOutput/native-libraries.txt
+          sha256sum "$apk" > MiuAndroidOutput/SHA256.txt
+          printf 'Source: https://github.com/0399199-stack/miu-ai\nCommit: %s\n' "$GITHUB_SHA" > MiuAndroidOutput/SOURCE.txt
+          cp LICENCE MiuAndroidOutput/
+      - name: Android 16 emulator smoke test
+        if: matrix.abi == 'x86_64'
+        timeout-minutes: 20
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-36;google_apis;x86_64' 'emulator'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n miu-api36 -k 'system-images;android-36;google_apis;x86_64' --device pixel_6
+          sudo chmod 666 /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -avd miu-api36 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb shell input keyevent 82
+          adb install MiuAndroidOutput/MiuAI-Android-x86_64.apk
+          adb logcat -c
+          adb shell am start -W -n ai.miu.controller/com.carriez.flutter_hbb.MainActivity > MiuAndroidOutput/emulator-start.txt
+          sleep 15
+          adb shell pidof ai.miu.controller >> MiuAndroidOutput/emulator-start.txt
+          adb exec-out screencap -p > MiuAndroidOutput/android16-portrait.png
+          adb shell settings put system accelerometer_rotation 0
+          adb shell settings put system user_rotation 1
+          sleep 3
+          adb exec-out screencap -p > MiuAndroidOutput/android16-landscape.png
+          adb shell am force-stop ai.miu.controller
+          adb shell am start -W -n ai.miu.controller/com.carriez.flutter_hbb.MainActivity >> MiuAndroidOutput/emulator-start.txt
+          sleep 5
+          adb shell pidof ai.miu.controller >> MiuAndroidOutput/emulator-start.txt
+          adb logcat -d > MiuAndroidOutput/android16-logcat.txt
+          if grep -E 'FATAL EXCEPTION|Fatal signal|E/flutter.*(Unhandled Exception|Error)' MiuAndroidOutput/android16-logcat.txt; then exit 1; fi
+          adb shell getprop ro.build.version.sdk >> MiuAndroidOutput/emulator-start.txt
+          adb shell getconf PAGE_SIZE >> MiuAndroidOutput/emulator-start.txt
+          adb emu kill
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: miu-android-${{ matrix.abi }}
+          path: MiuAndroidOutput/
+          if-no-files-found: error
+      - name: Clean signing material
+        if: always()
+        run: rm -f flutter/android/key.properties "$RUNNER_TEMP/miu-android.p12"
