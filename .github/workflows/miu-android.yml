@@ -1,6 +1,9 @@
 name: Miu AI Android controller
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/miu-boot-colors]
+    paths: [.github/workflows/miu-android.yml]
 permissions:
   contents: read
 env:
