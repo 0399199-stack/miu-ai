@@ -136,11 +136,13 @@ jobs:
         timeout-minutes: 20
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/miu-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-36;google_apis;x86_64' 'emulator'
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n miu-api36 -k 'system-images;android-36;google_apis;x86_64' --device pixel_6
           sudo chmod 666 /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -avd miu-api36 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          adb wait-for-device
+          timeout 120 adb wait-for-device || { cat "$RUNNER_TEMP/emulator.log"; exit 1; }
           for i in $(seq 1 90); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
             sleep 2
