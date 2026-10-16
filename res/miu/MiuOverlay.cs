@@ -187,7 +187,7 @@ internal sealed class Overlay : Form
                     int pillWidth = Math.Min(Math.Max(80, logicalWidth - 32), Math.Max(160, desiredWidth));
                     Rectangle r = new Rectangle((logicalWidth - pillWidth) / 2, 18, pillWidth, 44);
                     using (GraphicsPath path = Pill(r, 12))
-                    using (Brush fill = new SolidBrush(Color.Black))
+                    using (Brush fill = new SolidBrush(Color.FromArgb(179, color)))
                     {
                         for (int spread = 12; spread >= 1; spread--)
                         {
@@ -195,7 +195,9 @@ internal sealed class Overlay : Form
                             using (Pen halo = new Pen(Color.FromArgb(alpha, Color.White), spread * 2))
                                 g.DrawPath(halo, path);
                         }
+                        g.CompositingMode = CompositingMode.SourceCopy;
                         g.FillPath(fill, path);
+                        g.CompositingMode = CompositingMode.SourceOver;
                         using (Pen rim = new Pen(Color.FromArgb(210, Color.White), 1f))
                             g.DrawPath(rim, path);
                     }
@@ -372,7 +374,7 @@ internal sealed class OverlayApp : ApplicationContext
         }
         if (!ambient)
         {
-            // Keep the opaque banner separate from the animated edge layer.
+            // Keep the steady banner separate from the animated edge layer.
             windows[screens.Length] = new Overlay(Screen.PrimaryScreen, color, 0, true, false, text);
             windows[screens.Length].Show();
         }
