@@ -2755,7 +2755,7 @@ pub fn main_get_printer_names() -> SyncReturn<String> {
 }
 
 pub fn main_get_common(key: String) -> String {
-    #[cfg(windows)]
+    #[cfg(any(windows, all(target_os = "android", feature = "miu-android-controller")))]
     if key == "miu-controller-public-key" && get_app_name() == "MiuAI" {
         return crate::miu_pairing::local_public_key();
     }

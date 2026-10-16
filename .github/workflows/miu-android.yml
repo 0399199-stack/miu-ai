@@ -3,7 +3,14 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/miu-boot-colors]
-    paths: [.github/workflows/miu-android.yml]
+    paths:
+      - .github/workflows/miu-android.yml
+      - flutter/android/**
+      - flutter/lib/mobile/**
+      - src/client.rs
+      - src/client/io_loop.rs
+      - src/flutter.rs
+      - src/flutter_ffi.rs
 permissions:
   contents: read
 env:
