@@ -30,12 +30,15 @@ jobs:
       - name: Install and exercise on Android 16
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/miu-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           mkdir -p results
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'system-images;android-36;google_apis;x86_64' 'emulator'
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n miu-api36 -k 'system-images;android-36;google_apis;x86_64' --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx miu-api36
           sudo chmod 666 /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -avd miu-api36 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > results/emulator.log 2>&1 &
-          adb wait-for-device
+          timeout 120 adb wait-for-device || { cat results/emulator.log; exit 1; }
           for i in $(seq 1 90); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
             sleep 2
@@ -48,8 +51,9 @@ jobs:
           sleep 15
           adb shell pidof ai.miu.controller >> results/start.txt
           adb exec-out screencap -p > results/android16-portrait.png
-          adb shell uiautomator dump /sdcard/miu-window.xml
-          adb pull /sdcard/miu-window.xml results/portrait.xml
+          if timeout 30 adb shell uiautomator dump /sdcard/miu-window.xml; then
+            adb pull /sdcard/miu-window.xml results/portrait.xml
+          fi
           adb shell settings put system accelerometer_rotation 0
           adb shell settings put system user_rotation 1
           sleep 3
