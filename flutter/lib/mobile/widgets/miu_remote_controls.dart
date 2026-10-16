@@ -34,14 +34,19 @@ class _MiuMobileControlsState extends State<MiuMobileControls> {
     final input = TextEditingController(text: widget.ffi.ffiModel.miuOverlayText);
     final value = await showDialog<String>(context: context,
       builder: (context) => AlertDialog(title: const Text('光效文字'),
-        content: TextField(controller: input, maxLength: 160, minLines: 1, maxLines: 4),
+        content: TextField(controller: input, maxLength: 80),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, input.text.trim()),
-              child: const Text('保存')),
+          ValueListenableBuilder<TextEditingValue>(valueListenable: input,
+            builder: (_, value, __) => FilledButton(
+              onPressed: value.text.trim().isEmpty || value.text.runes.length > 80 ||
+                  RegExp(r'[\x00-\x1F\x7F-\x9F]').hasMatch(value.text) ? null
+                  : () => Navigator.pop(context, value.text.trim()),
+              child: const Text('保存'))),
         ]));
     input.dispose();
-    if (!mounted || value == null || widget.ffi.closed) return;
+    if (!mounted || value == null || widget.ffi.closed ||
+        !widget.ffi.ffiModel.miuPeerAuthenticated) return;
     bind.sessionSetMiuOverlayText(sessionId: widget.ffi.sessionId, text: value);
   }
 

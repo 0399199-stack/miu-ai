@@ -553,6 +553,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget getBottomAppBar() {
     final ffiModel = Provider.of<FfiModel>(context);
+    Widget miuViewport(Widget child) => isAndroid && appName == 'MiuAI'
+        ? Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: child))
+        : child;
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -560,7 +563,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(
+          miuViewport(Row(
               children: <Widget>[
                     IconButton(
                       color: Colors.white,
@@ -640,7 +643,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         showActions(widget.id);
                       },
                     ),
-                  ]))),
+                  ])),
           Obx(() => IconButton(
                 color: Colors.white,
                 icon: Icon(Icons.expand_more),
