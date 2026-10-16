@@ -135,6 +135,7 @@ jobs:
         if: matrix.abi == 'x86_64'
         timeout-minutes: 20
         run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-36;google_apis;x86_64' 'emulator'
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n miu-api36 -k 'system-images;android-36;google_apis;x86_64' --device pixel_6
           sudo chmod 666 /dev/kvm
