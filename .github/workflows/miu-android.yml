@@ -84,6 +84,7 @@ jobs:
         with:
           prefix-key: miu-android
           key: ${{ matrix.target }}
+          cache-on-failure: true
       - name: Native controller
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
@@ -91,7 +92,7 @@ jobs:
           RUSTFLAGS: -C link-arg=-Wl,-z,max-page-size=16384
         run: |
           cargo install cargo-ndk --version 3.1.2 --locked
-          cargo ndk --platform 26 --target '${{ matrix.target }}' build --locked --release --features flutter,hwcodec,miu-android-controller
+          cargo ndk --platform 26 --target '${{ matrix.target }}' build --lib --locked --release --features flutter,hwcodec,miu-android-controller
           mkdir -p flutter/android/app/src/main/jniLibs/${{ matrix.abi }}
           cp target/${{ matrix.target }}/release/liblibrustdesk.so flutter/android/app/src/main/jniLibs/${{ matrix.abi }}/librustdesk.so
           cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.target }}/libc++_shared.so" flutter/android/app/src/main/jniLibs/${{ matrix.abi }}/

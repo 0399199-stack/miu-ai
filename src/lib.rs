@@ -14,7 +14,7 @@ mod server;
 #[cfg(not(any(target_os = "ios")))]
 pub use self::server::*;
 mod client;
-#[cfg(windows)]
+#[cfg(any(windows, all(target_os = "android", feature = "miu-android-controller")))]
 mod miu_pairing;
 mod lan;
 #[cfg(not(any(target_os = "ios")))]
