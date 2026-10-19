@@ -5,7 +5,7 @@ on:
       build_run:
         description: APK build run ID
         required: true
-        default: '38949642285'
+        default: '39261440368'
   push:
     branches: [codex/miu-boot-colors]
     paths: [.github/workflows/miu-android-smoke.yml]
@@ -26,7 +26,7 @@ jobs:
           name: miu-android-x86_64
           path: apk
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.build_run || '38949642285' }}
+          run-id: ${{ inputs.build_run || '39261440368' }}
       - name: Install and exercise on Android 16
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
