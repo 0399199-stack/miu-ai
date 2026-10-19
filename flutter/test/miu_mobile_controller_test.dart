@@ -50,9 +50,19 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var paired = false;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(backgroundColor: const Color(0xFFF0F3FA)))),
+      home: Scaffold(body: SingleChildScrollView(
       child: MiuControllerHeader(onPair: () => paired = true)))));
     expect(find.text('Miu AI'), findsOneWidget);
+    final buttonFinder = find.byWidgetPredicate((widget) => widget is OutlinedButton);
+    final button = tester.widget<OutlinedButton>(buttonFinder);
+    final inherited = Theme.of(tester.element(buttonFinder)).outlinedButtonTheme.style!;
+    final effectiveStyle = button.style!.merge(inherited);
+    final foreground = effectiveStyle.foregroundColor!.resolve({})!;
+    final background = effectiveStyle.backgroundColor!.resolve({})!;
+    expect((foreground.computeLuminance() + .05) / (background.computeLuminance() + .05), greaterThan(4.5));
     await tester.tap(find.text('首次配对密钥'));
     expect(paired, isTrue);
     expect(tester.takeException(), isNull);

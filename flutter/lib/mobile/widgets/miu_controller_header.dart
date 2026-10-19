@@ -23,6 +23,7 @@ class MiuControllerHeader extends StatelessWidget {
       const SizedBox(height: 14),
       OutlinedButton.icon(onPressed: onPair,
         style: OutlinedButton.styleFrom(foregroundColor: Colors.white,
+            backgroundColor: const Color(0xFF163A73),
             side: const BorderSide(color: Color(0xFF9BBFFF))),
         icon: const Icon(Icons.key_rounded, size: 18), label: const Text('首次配对密钥')),
     ]),
