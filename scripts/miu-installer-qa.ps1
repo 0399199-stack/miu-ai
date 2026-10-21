@@ -127,8 +127,9 @@ try {
     $installed = $true
     Verify-Installation 'current' $ExpectedCommit $true
     if ($ExpectedVersion) {
-        $exeVersion = (Get-Item -LiteralPath (Join-Path $installDirectory 'MiuAI.exe')).VersionInfo.FileVersion
-        Check 'Installed executable version' ($exeVersion -like "$ExpectedVersion.*") $exeVersion
+        $versionInfo = (Get-Item -LiteralPath (Join-Path $installDirectory 'MiuAI.exe')).VersionInfo
+        $exeVersion = '{0}.{1}.{2}' -f $versionInfo.FileMajorPart, $versionInfo.FileMinorPart, $versionInfo.FileBuildPart
+        Check 'Installed executable version' ($exeVersion -eq $ExpectedVersion) $versionInfo.FileVersion
     }
     Record-SystemPolicy 'after-current-install'
     if ($Scenario -ne 'clean') {
