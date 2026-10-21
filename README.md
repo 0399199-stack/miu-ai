@@ -1,3 +1,15 @@
+# Miu AI · Windows A/B · V2.4.1
+
+本仓库的 `main` 分支是 Miu AI 当前开发代码，基于 RustDesk，保留 AGPL-3.0 授权。
+
+- A 控制端：下载 Release 中的 `MiuAI-A-V2.4.1-Windows-x64-portable.zip`，完整解压后运行 `MiuAI.exe`。
+- B 被控端：使用 `MiuAI-B-V2.4.1-Windows-x64.msi` 安装或升级。
+- [版本与下载](https://github.com/0399199-stack/miu-ai/releases/tag/v2.4.1) · [换电脑继续开发](docs/MIU-DEVELOPMENT.md) · [V2.4.1 变更说明](docs/MIU-V2.4.1.md)
+- 安卓 APK 开发已停止，Miu 专用安卓功能与构建流程已移除；旧提交保留用于追溯。上游跨平台基础文件仍保留。
+- 当前包未做 Windows 代码签名；测试范围以 Release 中的验证报告为准。
+
+以下保留上游说明与致谢。
+
 <p align="center">
   <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#raw-steps-to-build">Build</a> •

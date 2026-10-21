@@ -107,10 +107,11 @@ class _MiuGlowPanelState extends State<MiuGlowPanel> {
             padding: EdgeInsets.zero, tooltip: '自定义颜色', iconSize: 19,
             onPressed: !ready ? null : () async {
               final initial = Color(int.parse(model.miuOverlayColor.substring(1), radix: 16) | 0xFF000000);
-              final selected = await showColorPickerDialog(context, initial,
+              final selected = await showColorPickerDialog(
+                Navigator.of(context, rootNavigator: true).context, initial,
                 pickersEnabled: {ColorPickerType.accent: false, ColorPickerType.wheel: true},
                 showColorCode: true);
-              if (mounted && selected != initial) {
+              if (selected != initial && model.miuPeerAuthenticated && !widget.ffi.closed) {
                 _settings(color: '#${(selected.value & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}');
               }
             }, icon: const Icon(Icons.add_rounded))),

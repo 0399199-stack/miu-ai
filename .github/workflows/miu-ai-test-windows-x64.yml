@@ -1,4 +1,4 @@
-name: Miu AI unsigned Windows x64 test build
+name: Miu AI unsigned Windows x64 build
 
 on:
   workflow_dispatch:
@@ -224,7 +224,7 @@ jobs:
         shell: pwsh
         run: |
           Push-Location ./res/msi
-          python preprocess.py --arp --app-name MiuAI --manufacturer 'Miu AI Test Build' -d ../../rustdesk
+          python preprocess.py --arp --app-name MiuAI --manufacturer 'Miu AI' --revision-version 0 -d ../../rustdesk
           $agpl = [IO.File]::ReadAllText((Resolve-Path ../../LICENCE).Path)
           $escaped = $agpl.Replace('\', '\\').Replace('{', '\{').Replace('}', '\}')
           $escaped = $escaped.Replace("`r`n", '\par ').Replace("`n", '\par ').Replace("`r", '\par ')

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_boot_controls.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_boot_player.dart';
+import 'package:flutter_hbb/desktop/widgets/miu_glow_panel.dart';
 import 'package:flutter_hbb/desktop/widgets/miu_toolbar_surface.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -39,7 +40,12 @@ class _Peer extends ChangeNotifier implements FfiModel {
   @override
   bool get miuPeerAuthenticated => true;
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => {
+    #isPeerWindows: true, #miuOverlayEnabled: true,
+    #miuOverlayModeSupported: true, #miuOverlayMode: 'session',
+    #miuOverlayColor: '#317CFF', #miuOverlayIntensity: 100,
+    #miuOverlayPeriodMs: 1600, #miuOverlayEffect: 'steady',
+  }[invocation.memberName];
 }
 
 class _Session implements FFI {
@@ -55,8 +61,9 @@ class _Session implements FFI {
 }
 
 void main() {
+  for (final glow in [false, true]) {
   for (final confirm in [true, false]) {
-    testWidgets('custom boot color ${confirm ? 'saves' : 'cancels'} from toolbar menu',
+    testWidgets('custom ${glow ? 'glow' : 'boot'} color ${confirm ? 'confirms' : 'cancels'} from toolbar menu',
         (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1;
@@ -69,30 +76,37 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: Scaffold(
         body: MiuToolbarMenuBar(child: MiuToolbarMenu(
           icon: Icons.palette_outlined, label: '光效',
-          builder: (_, close) => MiuBootControls(ffi: _Session(chat, peer)),
+          builder: (_, close) => glow
+              ? MiuGlowPanel(ffi: _Session(chat, peer), onClose: close,
+                  textControls: const SizedBox.shrink())
+              : MiuBootControls(ffi: _Session(chat, peer)),
         )),
       )));
       await tester.tap(find.text('光效'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('自定义颜色  #48AAFF'));
+      await tester.tap(glow ? find.byTooltip('自定义颜色')
+          : find.text('自定义颜色  #48AAFF'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Wheel'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '12ABEF');
+      final hex = glow && confirm ? '317CFF' : '12ABEF';
+      await tester.enterText(find.byType(TextField), hex);
       await tester.pumpAndSettle();
       expect(tester.widget<ColorCodeField>(find.byType(ColorCodeField)).color,
-          const Color(0xFF12ABEF));
+          Color(int.parse(hex, radix: 16) | 0xFF000000));
       await tester.tap(find.text(confirm ? 'OK' : 'Cancel'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byType(ColorPicker), findsNothing);
-      expect(chat.saves, confirm ? 1 : 0);
-      expect(chat.miuBootSettings?.color, confirm ? '#12ABEF' : '#48AAFF');
+      expect(chat.saves, !glow && confirm ? 1 : 0);
+      expect(chat.miuBootSettings?.color, !glow && confirm ? '#12ABEF' : '#48AAFF');
       await tester.tap(find.text('光效'));
       await tester.pumpAndSettle();
-      expect(find.text('自定义颜色  ${chat.miuBootSettings?.color}'), findsOneWidget);
+      expect(glow ? find.byTooltip('自定义颜色')
+          : find.text('自定义颜色  ${chat.miuBootSettings?.color}'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
+  }
   }
 
   Future<_Chat> mount(WidgetTester tester, {bool supported = true}) async {
