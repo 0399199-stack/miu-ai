@@ -81,6 +81,7 @@ python .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 换开发电脑只需克隆代码；若同时更换 A 使用电脑，需单独按应用的配对流程配置，不能把本机凭据当作源码提交。
 B 的 Windows 受保护凭据不能靠复制普通配置文件保证迁移成功；必要时在 B 本机重新输入 Key。
 旧 APK、安卓签名备份与本机构建缓存不参与 Windows 构建。
+如果此前把 B 的唯一主控公钥改成了手机公钥，停止 APK 开发不会自动改变 B 的信任设置；需在 B 恢复 Windows A 的主控公钥。
 
 ## 5. 版本更新位置
 
