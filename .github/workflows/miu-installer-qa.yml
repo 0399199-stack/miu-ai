@@ -2,11 +2,10 @@ name: Miu installer isolated VM QA
 
 on:
   workflow_dispatch:
-  push:
-    branches: [codex/miu-boot-colors]
-    paths:
-      - .github/workflows/miu-installer-qa.yml
-      - scripts/miu-installer-qa.ps1
+    inputs:
+      build_run:
+        description: Windows build run containing the V2.4.1 packages
+        required: true
 
 permissions:
   contents: read
@@ -20,14 +19,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [clean, upgrade, upgrade-run25]
+        scenario: [clean, upgrade-run31]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - name: Download Run26 packages
+      - name: Download current packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: miu-ai-test-windows-x64-unsigned
-          run-id: 38182643564
+          run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: qa-input/current
       - name: Download fixed upgrade baseline
@@ -35,12 +34,18 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: miu-ai-test-windows-x64-unsigned
-          run-id: ${{ matrix.scenario == 'upgrade-run25' && '38174018470' || '38157508131' }}
+          run-id: 38920274108
           github-token: ${{ github.token }}
           path: qa-input/baseline
       - name: Install, verify, and uninstall in disposable VM
         shell: pwsh
-        run: ./scripts/miu-installer-qa.ps1 -Scenario '${{ matrix.scenario }}' -CurrentDirectory ./qa-input/current -BaselineDirectory ./qa-input/baseline -OutputDirectory ./qa-results
+        run: |
+          $manifest = Get-Content ./qa-input/current/SHA256.txt -Raw
+          $commit = [regex]::Match($manifest, '(?m)^Source commit:\s*([a-f0-9]{40})').Groups[1].Value
+          $msiHash = [regex]::Match($manifest, '(?m)^([A-Fa-f0-9]{64})\s+miu-ai-test-x64\.msi').Groups[1].Value
+          $zipHash = [regex]::Match($manifest, '(?m)^([A-Fa-f0-9]{64})\s+miu-ai-test-x64-portable\.zip').Groups[1].Value
+          if (-not $commit -or -not $msiHash -or -not $zipHash) { throw 'Incomplete build manifest' }
+          ./scripts/miu-installer-qa.ps1 -Scenario '${{ matrix.scenario }}' -CurrentDirectory ./qa-input/current -BaselineDirectory ./qa-input/baseline -OutputDirectory ./qa-results -ExpectedCommit $commit -ExpectedMsiHash $msiHash -ExpectedZipHash $zipHash -ExpectedVersion '2.4.1'
       - name: Upload installation logs and evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
