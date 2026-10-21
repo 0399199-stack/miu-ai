@@ -106,17 +106,6 @@ android {
         versionName flutterVersionName
     }
 
-    if (project.hasProperty('miuController')) {
-        flavorDimensions "edition"
-        productFlavors {
-            miu {
-                dimension "edition"
-                applicationId "ai.miu.controller"
-                minSdkVersion 26
-            }
-        }
-    }
-
     signingConfigs {
       release {
         keyAlias keystoreProperties['keyAlias']

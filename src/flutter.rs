@@ -691,7 +691,7 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("permission", &[(name, &value.to_string())], &[]);
     }
 
-    #[cfg(any(windows, all(target_os = "android", feature = "miu-android-controller")))]
+    #[cfg(windows)]
     fn set_miu_overlay_settings(&self, settings: &MiuOverlaySettings) {
         self.push_event(
             "miu_overlay_settings",

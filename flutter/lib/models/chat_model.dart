@@ -408,7 +408,7 @@ class ChatModel with ChangeNotifier {
       return;
     }
     if (text.isEmpty) return;
-    if (appName == 'MiuAI' && (isDesktop || isAndroid) && text.startsWith(_miuControlPrefix)) {
+    if (appName == 'MiuAI' && isDesktop && text.startsWith(_miuControlPrefix)) {
       await _receiveMiuControl(id, text.substring(_miuControlPrefix.length));
       return;
     }
@@ -730,7 +730,7 @@ class ChatModel with ChangeNotifier {
   Future<Map<String, dynamic>?> _requestMiuControl(
       String action, Object? value) async {
     final session = parent.target;
-    if ((!isWindows && !isAndroid) ||
+    if (!isWindows ||
         appName != 'MiuAI' ||
         session == null ||
         session.closed ||

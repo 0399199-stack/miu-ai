@@ -39,11 +39,6 @@ lazy_static::lazy_static! {
 }
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
-    #[cfg(all(target_os = "android", feature = "miu-android-controller"))]
-    {
-        *config::APP_NAME.write().unwrap() = "MiuAI".to_owned();
-        config::HARD_SETTINGS.write().unwrap().insert("conn-type".into(), "outgoing".into());
-    }
     flutter::async_tasks::start_flutter_async_runner();
     // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
     #[cfg(not(target_os = "ios"))]
@@ -2755,7 +2750,7 @@ pub fn main_get_printer_names() -> SyncReturn<String> {
 }
 
 pub fn main_get_common(key: String) -> String {
-    #[cfg(any(windows, all(target_os = "android", feature = "miu-android-controller")))]
+    #[cfg(windows)]
     if key == "miu-controller-public-key" && get_app_name() == "MiuAI" {
         return crate::miu_pairing::local_public_key();
     }

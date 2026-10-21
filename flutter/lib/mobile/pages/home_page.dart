@@ -150,7 +150,7 @@ class HomePageState extends State<HomePage> {
         ],
       );
     }
-    return Text(appName == 'MiuAI' ? 'Miu AI · 控制端' : bind.mainGetAppNameSync());
+    return Text(bind.mainGetAppNameSync());
   }
 }
 

@@ -2039,7 +2039,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::ChatMessage(c)) => {
                         self.handler.new_message(c.text);
                     }
-                    #[cfg(any(windows, all(target_os = "android", feature = "miu-android-controller")))]
+                    #[cfg(windows)]
                     Some(misc::Union::MiuOverlaySettings(settings)) => {
                         self.handler.ui_handler.set_miu_overlay_settings(&settings);
                     }

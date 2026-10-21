@@ -384,7 +384,7 @@ class FfiModel with ChangeNotifier {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
         await handlePeerInfo(evt, peerId, false);
-        if ((isWindows || isAndroid) && appName == 'MiuAI' && !isWeb) {
+        if (isWindows && appName == 'MiuAI' && !isWeb) {
           miuPeerAuthenticated = true;
           notifyListeners();
           bind.sessionQueryMiuOverlaySettings(sessionId: sessionId);
@@ -401,7 +401,7 @@ class FfiModel with ChangeNotifier {
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
-        if ((isWindows || isAndroid) && appName == 'MiuAI' && !isWeb) {
+        if (isWindows && appName == 'MiuAI' && !isWeb) {
           miuPeerAuthenticated = false;
           miuOverlayEnabled = null;
           parent.target?.chatModel.resetMiuControlState();

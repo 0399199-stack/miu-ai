@@ -3913,7 +3913,7 @@ impl LoginConfigHandler {
             _ => {}
         }
 
-        #[cfg(any(windows, all(target_os = "android", feature = "miu-android-controller")))]
+        #[cfg(windows)]
         if crate::common::get_app_name() == "MiuAI" {
             crate::miu_pairing::sign_login(&mut lr, &self.hash.miu_pairing_nonce);
         }

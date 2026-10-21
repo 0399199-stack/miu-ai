@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
-import '../widgets/miu_controller_header.dart';
 
 import 'package:auto_size_text_field/auto_size_text_field.dart';
 import 'package:flutter/material.dart';
@@ -86,9 +84,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       slivers: [
         SliverList(
             delegate: SliverChildListDelegate([
-          if (isAndroid && appName == 'MiuAI')
-            MiuControllerHeader(onPair: _showMiuPairing),
-          if (!bind.isCustomClient() && !isIOS && appName != 'MiuAI')
+          if (!bind.isCustomClient() && !isIOS)
             Obx(() => _buildUpdateUI(stateGlobal.updateUrl.value)),
           _buildRemoteIDTextField(),
         ])),
@@ -105,28 +101,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   void onConnect() {
     var id = _idController.id;
     connect(context, id);
-  }
-
-  Future<void> _showMiuPairing() async {
-    final key = await bind.mainGetCommon(key: 'miu-controller-public-key');
-    if (!mounted) return;
-    await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('手机主控配对密钥'),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('在 B 机首次配对页面粘贴此密钥，并设置连接密码。\n\n当前 B 机仅保存一个主控密钥；更换为手机密钥会替换原电脑主控的配对。'),
-          const SizedBox(height: 16),
-          SelectableText(key.isEmpty ? '密钥准备中，请稍后重新打开' : key),
-        ])),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
-        FilledButton(onPressed: key.isEmpty ? null : () async {
-          await Clipboard.setData(ClipboardData(text: key));
-          if (dialogContext.mounted) Navigator.pop(dialogContext);
-          showToast('配对密钥已复制');
-        }, child: const Text('复制密钥')),
-      ],
-    ));
   }
 
   void onFocusChanged() {
