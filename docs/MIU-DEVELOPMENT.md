@@ -43,6 +43,8 @@ git switch -c dev/my-change v2.4.1
 4. 下载 `miu-ai-test-windows-x64-unsigned` artifact，其中包含便携 ZIP、MSI、源码提交信息和 SHA256。
 5. 验证后再发布新 Release。便携包用作 A，MSI 用作 B；它们来自同一份 Windows 程序。
 
+本仓库已停用旧安卓 CI，以及上游的 F-Droid、Tag、Nightly、Full Flutter CI 和 playground 多平台构建入口，避免标签发布时重新生成 APK。保留 Miu Windows 构建、桥接、窗口组件及安装验证流程；不要为 Windows 构建重新启用旧安卓流程。
+
 已安装 GitHub CLI 时也可运行：
 
 ```powershell
