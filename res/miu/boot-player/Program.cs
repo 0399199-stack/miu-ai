@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -44,9 +45,18 @@ internal sealed class BootWindow : Window
 {
     private readonly WebView2CompositionControl view = new WebView2CompositionControl();
     private readonly string color;
-    private readonly ReadySurface ready;
+    private dynamic narrator;
+    private static readonly Dictionary<string, string> narration = new Dictionary<string, string> {
+        { "voice:access", "Access permission required." },
+        { "voice:identity", "Identity verification." },
+        { "voice:request", "Access request received." },
+        { "voice:read", "Reading permissions." },
+        { "voice:complete", "Read complete." },
+        { "voice:verified", "Verification complete." },
+        { "voice:ready", "Miu AI is ready. Let us begin your day." }
+    };
     private readonly Border backdrop = new Border { Background = Brushes.Black, IsHitTestVisible = false };
-    private readonly DispatcherTimer watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(35) };
+    private readonly DispatcherTimer watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(65) };
     private const string Origin = "https://miu-boot.local/";
 
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
@@ -61,22 +71,27 @@ internal sealed class BootWindow : Window
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
-        ShowInTaskbar = true;
+        ShowInTaskbar = false;
         Topmost = true;
         Cursor = Cursors.None;
-        ready = new ReadySurface(color);
         var root = new Grid();
         root.Children.Add(backdrop);
         root.Children.Add(view);
-        root.Children.Add(ready);
         Content = root;
-        SizeChanged += (_, __) => ready.Width = Math.Min(ActualWidth * .62, ActualHeight * 1.05);
         view.DefaultBackgroundColor = System.Drawing.Color.Transparent;
         view.AllowExternalDrop = false;
         SourceInitialized += (_, __) =>
         {
             var bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
             var hwnd = new WindowInteropHelper(this).Handle;
+            HwndSource.FromHwnd(hwnd).AddHook((IntPtr h, int message, IntPtr w, IntPtr l, ref bool handled) => {
+                if (message == 0x0100 && w.ToInt32() == 27) { handled = true; Stop("skipped"); }
+                return IntPtr.Zero;
+            });
+            var source = PresentationSource.FromVisual(this);
+            var logical = source.CompositionTarget.TransformFromDevice.Transform(new Point(bounds.Width, bounds.Height));
+            Width = logical.X;
+            Height = logical.Y;
             SetWindowPos(hwnd, new IntPtr(-1), bounds.X, bounds.Y, bounds.Width, bounds.Height, 0x0040);
             RectNative actual;
             if (!GetWindowRect(hwnd, out actual) || actual.Right - actual.Left != bounds.Width || actual.Bottom - actual.Top != bounds.Height)
@@ -84,7 +99,11 @@ internal sealed class BootWindow : Window
         };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Stop("skipped"); } };
         watchdog.Tick += (_, __) => Stop("timeout");
-        Closed += (_, __) => { watchdog.Stop(); view.Dispose(); };
+        Closed += (_, __) => {
+            watchdog.Stop();
+            try { if (narrator != null) narrator.Speak("", 3); } catch (Exception) { }
+            view.Dispose();
+        };
         Loaded += async (_, __) =>
         {
             watchdog.Start();
@@ -93,7 +112,8 @@ internal sealed class BootWindow : Window
                 string folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web");
                 if (!File.Exists(Path.Combine(folder, "index.html"))) throw new FileNotFoundException();
                 string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiuAI", "BootWebView");
-                var environment = await CoreWebView2Environment.CreateAsync(null, profile);
+                var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+                var environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
                 await view.EnsureCoreWebView2Async(environment);
                 var core = view.CoreWebView2;
                 core.Settings.AreDevToolsEnabled = false;
@@ -119,22 +139,43 @@ internal sealed class BootWindow : Window
                 {
                     if (e.Source != Origin + "index.html") return;
                     string message = e.TryGetWebMessageAsString();
+                    if (message == "skip") { Stop("skipped"); return; }
+                    if (narration.TryGetValue(message, out var spoken))
+                    {
+                        try
+                        {
+                            if (narrator == null)
+                            {
+                                var type = Type.GetTypeFromProgID("SAPI.SpVoice");
+                                if (type != null)
+                                {
+                                    narrator = Activator.CreateInstance(type);
+                                    var voices = narrator.GetVoices("Language=409");
+                                    if (voices.Count > 0) narrator.Voice = voices.Item(0);
+                                }
+                            }
+                            if (narrator != null) {
+                                narrator.Speak(spoken, 1);
+                                Console.Error.WriteLine("Miu boot: narration " + message.Substring(6));
+                            }
+                        }
+                        catch (Exception) { Console.Error.WriteLine("Miu boot: narrator unavailable"); }
+                        return;
+                    }
                     if (message == "started") { Console.WriteLine("STARTED"); Console.Out.Flush(); }
                     else if (message == "handoff")
                     {
                         view.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromSeconds(1.4)) {
                             EasingFunction = new QuinticEase { EasingMode = EasingMode.EaseInOut }
                         });
-                        ready.Play();
-                        // Keep READY opaque, then reveal the desktop from the center
-                        // to the saved edge glow. Both stops finish before the window closes.
+                        // Reveal the desktop and its existing glow after the new finale.
                         var mask = new RadialGradientBrush(Colors.White, Colors.White) { RadiusX = .72, RadiusY = .72 };
                         backdrop.OpacityMask = mask;
                         for (int i = 0; i < mask.GradientStops.Count; i++)
                         {
                             mask.GradientStops[i].BeginAnimation(GradientStop.ColorProperty,
                                 new ColorAnimation(Colors.White, Colors.Transparent, TimeSpan.FromSeconds(1.45)) {
-                                    BeginTime = TimeSpan.FromSeconds(4 + i * .2),
+                                    BeginTime = TimeSpan.FromSeconds(i * .12),
                                     EasingFunction = new QuinticEase { EasingMode = EasingMode.EaseInOut }
                                 });
                         }
