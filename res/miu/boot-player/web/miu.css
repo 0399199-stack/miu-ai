@@ -7,3 +7,4 @@ html,body { margin:0; width:100%; height:100%; background:#000; overflow:hidden;
 .dsu-skip,.dsu-action,.dsu-voice { display:none!important; }
 .dsu-black-en { font-size:clamp(58px,8vw,126px)!important; letter-spacing:.05em!important; text-indent:.05em!important; }
 .dsu-brand-3 { display:none!important; }
+.dsu-percent { position:absolute; right:0; bottom:12px; color:var(--dsu-accent); font:600 12px var(--dsu-mono); letter-spacing:.08em; }

@@ -8,16 +8,18 @@ is `web/DSH-LICENSE.txt`. Its original DeepSeek logo and audio recordings are no
 The fullscreen sequence shows a Miu AI wordmark, then bilingual permission,
 identity and verification-themed animation, followed by the bilingual welcome.
 Those lines are visual narration only and do not request, read or verify permissions.
-It plays automatically, with a local synthesized interface sound and Windows SAPI
-English narration. Playback depends on the system audio device and installed voice.
+It plays automatically, with locally generated ambient music and interface cues,
+plus Windows SAPI English narration. Playback depends on the system audio device
+and installed voice. The stage progress bar also displays a percentage.
 The saved A-side boot color supplies the animation accent. On completion the
 black backdrop fades away to reveal B's existing desktop and saved glow.
 
 The existing authenticated A/B transport, login option and player protocol remain:
 `STARTED` is printed once the document has loaded, `--color #RRGGBB` sets the
-accent, `--check` probes WebView2, and only one player runs per session. Escape
-is handled in both WPF and the WebView; a 65-second watchdog closes a stalled
-player. The script loads only locally mapped resources; external requests and
+accent, `--check` probes WebView2, and only one player runs per session. The player
+does not respond to Escape or an ordinary close request during playback; it closes
+normally at the end. A 65-second watchdog handles a stalled player. The script loads
+only locally mapped resources; external requests and
 permissions remain blocked by the native host.
 
 Build on Windows with .NET SDK / Framework 4.8 and WebView2:

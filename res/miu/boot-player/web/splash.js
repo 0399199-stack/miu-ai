@@ -554,7 +554,7 @@
     '<div class="dsu-subtitle">' +
       '<span class="dsu-sub-zh"></span><span class="dsu-sub-en2"></span>' +
     '</div>' +
-    '<div class="dsu-progress"><i></i></div>' +
+    '<div class="dsu-progress"><i></i><span class="dsu-percent">0%</span></div>' +
     '<div class="dsu-bloom"></div>' +
     '<div class="dsu-streak"></div>' +
     '<div class="dsu-flash"></div>'
@@ -614,6 +614,7 @@
   ui.subEn2 = q('.dsu-sub-en2')
   ui.progress = q('.dsu-progress')
   ui.bar = q('.dsu-progress i')
+  ui.percent = q('.dsu-percent')
   ui.frame = q('.dsu-frame')
   ui.scanline = q('.dsu-scanline')
   ui.slats = q('.dsu-slats')
@@ -797,9 +798,22 @@
     for (var j = 0; j < list.length; j++) { try { list[j]() } catch (err) { /* noop */ } }
   }
 
+  var percentFrame = 0
+  var displayedPercent = 0
   function setProgress(p) {
     var pct = Math.max(0, Math.min(1, p))
-    ui.bar.style.width = Math.round(pct * 100) + '%'
+    var target = Math.round(pct * 100)
+    ui.bar.style.width = target + '%'
+    cancelAnimationFrame(percentFrame)
+    var start = displayedPercent
+    var started = performance.now()
+    function animate(now) {
+      var fraction = Math.min(1, (now - started) / 460)
+      displayedPercent = start + (target - start) * fraction
+      ui.percent.textContent = Math.round(displayedPercent) + '%'
+      if (fraction < 1) percentFrame = requestAnimationFrame(animate)
+    }
+    percentFrame = requestAnimationFrame(animate)
   }
 
   /** 六格阶段柱：走过的压暗、当前的拉满并点亮主题橙 */
@@ -1495,7 +1509,7 @@
     armStall()
     setStepCount(7, 'WELCOME')
     setSlats(7)
-    setProgress(1)
+    setProgress(0.97)
     /* 底部日志和终幕里的「欢迎 xxx 访问」区分开，避免同一句出现两遍 */
     setSubtitle('新的一天，从这里开始', 'A NEW DAY BEGINS')
     audio.chime()
@@ -1553,6 +1567,7 @@
       })
       /* 欢迎语没播完就不揭幕（素材缺失时这个 Promise 立刻 resolve，不影响节奏） */
       .then(function () { return welcome })
+      .then(function () { setProgress(1); return wait(500) })
       /* 揭幕：整个机位后撤 + 轻微失焦，比单纯淡出更有镜头感 */
       .then(function () {
         root.classList.add('dsu-handoff')

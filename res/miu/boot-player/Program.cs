@@ -16,11 +16,13 @@ using Microsoft.Web.WebView2.Wpf;
 
 internal static class Program
 {
+    [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
     [STAThread]
     private static int Main(string[] args)
     {
         try
         {
+            try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch (EntryPointNotFoundException) { }
             CoreWebView2Environment.GetAvailableBrowserVersionString();
             if (!File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html"))) return 1;
             if (args.Length == 1 && args[0] == "--check") return 0;
@@ -46,6 +48,9 @@ internal sealed class BootWindow : Window
     private readonly WebView2CompositionControl view = new WebView2CompositionControl();
     private readonly string color;
     private dynamic narrator;
+    private bool allowClose;
+    private readonly MediaPlayer music = new MediaPlayer();
+    private readonly MediaPlayer cue = new MediaPlayer();
     private static readonly Dictionary<string, string> narration = new Dictionary<string, string> {
         { "voice:access", "Access permission required." },
         { "voice:identity", "Identity verification." },
@@ -80,14 +85,12 @@ internal sealed class BootWindow : Window
         Content = root;
         view.DefaultBackgroundColor = System.Drawing.Color.Transparent;
         view.AllowExternalDrop = false;
+        Closing += (_, e) => { if (!allowClose) e.Cancel = true; };
+        Application.Current.SessionEnding += (_, e) => { allowClose = true; };
         SourceInitialized += (_, __) =>
         {
             var bounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
             var hwnd = new WindowInteropHelper(this).Handle;
-            HwndSource.FromHwnd(hwnd).AddHook((IntPtr h, int message, IntPtr w, IntPtr l, ref bool handled) => {
-                if (message == 0x0100 && w.ToInt32() == 27) { handled = true; Stop("skipped"); }
-                return IntPtr.Zero;
-            });
             var source = PresentationSource.FromVisual(this);
             var logical = source.CompositionTarget.TransformFromDevice.Transform(new Point(bounds.Width, bounds.Height));
             Width = logical.X;
@@ -97,10 +100,11 @@ internal sealed class BootWindow : Window
             if (!GetWindowRect(hwnd, out actual) || actual.Right - actual.Left != bounds.Width || actual.Bottom - actual.Top != bounds.Height)
                 throw new InvalidOperationException("Fullscreen bounds mismatch");
         };
-        PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Stop("skipped"); } };
         watchdog.Tick += (_, __) => Stop("timeout");
         Closed += (_, __) => {
             watchdog.Stop();
+            music.Close();
+            cue.Close();
             try { if (narrator != null) narrator.Speak("", 3); } catch (Exception) { }
             view.Dispose();
         };
@@ -111,6 +115,13 @@ internal sealed class BootWindow : Window
             {
                 string folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web");
                 if (!File.Exists(Path.Combine(folder, "index.html"))) throw new FileNotFoundException();
+                music.MediaFailed += (_, e) => Console.Error.WriteLine("Miu boot: music unavailable");
+                cue.MediaFailed += (_, e) => Console.Error.WriteLine("Miu boot: sound effect unavailable");
+                music.MediaEnded += (_, e) => { music.Position = TimeSpan.Zero; music.Play(); };
+                music.Volume = .35;
+                cue.Volume = .65;
+                music.Open(new Uri(Path.Combine(folder, "music.wav")));
+                cue.Open(new Uri(Path.Combine(folder, "cue.wav")));
                 string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiuAI", "BootWebView");
                 var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
                 var environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
@@ -139,9 +150,10 @@ internal sealed class BootWindow : Window
                 {
                     if (e.Source != Origin + "index.html") return;
                     string message = e.TryGetWebMessageAsString();
-                    if (message == "skip") { Stop("skipped"); return; }
                     if (narration.TryGetValue(message, out var spoken))
                     {
+                        cue.Position = TimeSpan.Zero;
+                        cue.Play();
                         try
                         {
                             if (narrator == null)
@@ -162,7 +174,7 @@ internal sealed class BootWindow : Window
                         catch (Exception) { Console.Error.WriteLine("Miu boot: narrator unavailable"); }
                         return;
                     }
-                    if (message == "started") { Console.WriteLine("STARTED"); Console.Out.Flush(); }
+                    if (message == "started") { music.Play(); Console.WriteLine("STARTED"); Console.Out.Flush(); }
                     else if (message == "handoff")
                     {
                         view.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromSeconds(1.4)) {
@@ -189,13 +201,14 @@ internal sealed class BootWindow : Window
             catch (Exception)
             {
                 Console.Error.WriteLine("Miu boot player could not start.");
-                Close();
+                Stop("initialization failure");
             }
         };
     }
 
     private void Stop(string reason)
     {
+        allowClose = true;
         try { Console.Error.WriteLine("Miu boot: " + reason); }
         catch (IOException) { /* The requesting app may already have closed its pipe. */ }
         Close();
